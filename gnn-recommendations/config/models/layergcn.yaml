@@ -1,0 +1,13 @@
+# Настройки модели LayerGCN
+
+model:
+  name: "LayerGCN"
+  embedding_dim: 64
+  n_layers: 3
+  
+  # LayerGCN параметры
+  # (будут добавлены при реализации)
+  
+  # Инициализация
+  init_method: "xavier_uniform"
+

@@ -1,0 +1,22 @@
+# Настройки датасета MovieLens-1M
+
+name: "movie_lens"
+data_path: "data/raw/movie_lens"
+
+# Фильтрация
+filtering:
+  min_user_interactions: 10
+  min_item_interactions: 10
+
+# Разделение данных
+split:
+  strategy: "temporal"  # или "random"
+  train_ratio: 0.7
+  valid_ratio: 0.1
+  test_ratio: 0.2
+
+# Граф
+graph:
+  normalize: true
+  self_loop: false
+

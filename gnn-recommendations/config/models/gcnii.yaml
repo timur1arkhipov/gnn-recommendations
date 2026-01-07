@@ -1,0 +1,14 @@
+# Настройки модели GCNII
+
+model:
+  name: "GCNII"
+  embedding_dim: 64
+  n_layers: 3
+  
+  # GCNII параметры
+  alpha: 0.1
+  lambda_reg: 0.5
+  
+  # Инициализация
+  init_method: "xavier_uniform"
+

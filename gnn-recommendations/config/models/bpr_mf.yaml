@@ -1,0 +1,9 @@
+# Настройки модели BPR-MF
+
+model:
+  name: "BPR_MF"
+  embedding_dim: 64
+  
+  # Инициализация
+  init_method: "xavier_uniform"
+

@@ -1,0 +1,2 @@
+"""Group Shuffle GNN module"""
+

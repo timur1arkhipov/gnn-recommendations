@@ -1,0 +1,13 @@
+# Настройки модели SVD-GCN
+
+model:
+  name: "SVD_GCN"
+  embedding_dim: 64
+  n_layers: 3
+  
+  # SVD параметры
+  # (будут добавлены при реализации)
+  
+  # Инициализация
+  init_method: "xavier_uniform"
+

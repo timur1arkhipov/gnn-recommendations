@@ -1,0 +1,10 @@
+# Настройки модели LightGCN
+
+model:
+  name: "LightGCN"
+  embedding_dim: 64
+  n_layers: 3
+  
+  # Инициализация
+  init_method: "xavier_uniform"
+
