@@ -72,28 +72,49 @@ def binarize_interactions(
     если пользователь взаимодействовал с айтемом (даже с низким рейтингом),
     это считается положительным сигналом.
     
+    Особенности:
+    - Для Book-Crossing: рейтинг 0 означает implicit feedback (пользователь прочитал, но не оценил)
+    - Для других датасетов: рейтинг 0 обычно означает отсутствие взаимодействия
+    
     Args:
         df: DataFrame с взаимодействиями
         rating_col: название колонки с рейтингами (если None, все взаимодействия = 1)
         threshold: порог рейтинга для бинаризации (если рейтинг >= threshold, то 1, иначе 0)
     
     Returns:
-        DataFrame с бинаризованными взаимодействиями (колонка rating заменена на 1/0)
+        DataFrame с бинаризованными взаимодействиями (колонка rating удалена, остаются только положительные)
     """
     df = df.copy()
     
     if rating_col and rating_col in df.columns:
-        # Если есть рейтинги, бинаризуем по порогу
+        # Если есть рейтинги, фильтруем по порогу
         # Обычно threshold = 0 означает, что любое взаимодействие = положительное
-        df['rating'] = (df[rating_col] > threshold).astype(int)
-        # Удаляем исходную колонку рейтинга
+        # Для Book-Crossing: рейтинг 0 тоже считается положительным (implicit feedback)
+        
+        # Проверяем наличие NaN значений в рейтингах
+        nan_count = df[rating_col].isna().sum()
+        if nan_count > 0:
+            print(f"  Найдено {nan_count} взаимодействий без рейтинга (NaN)")
+            print(f"  Они будут сохранены как implicit feedback (положительные взаимодействия)")
+        
+        # Оставляем взаимодействия с рейтингом >= threshold
+        # Для NaN значений: если threshold = 0, сохраняем их как implicit feedback
+        # Для threshold > 0: NaN значения будут исключены (так как NaN >= threshold = False)
+        if threshold == 0.0:
+            # При threshold = 0 сохраняем все, включая NaN (как implicit feedback)
+            # NaN >= 0 возвращает False, поэтому используем fillna для сохранения NaN значений
+            df = df[(df[rating_col] >= threshold) | (df[rating_col].isna())].copy()
+        else:
+            # При threshold > 0 исключаем NaN (они не проходят порог)
+            df = df[df[rating_col] >= threshold].copy()
+        
+        # Удаляем колонку рейтинга, так как она больше не нужна
         df = df.drop(columns=[rating_col])
     else:
-        # Если рейтингов нет, все взаимодействия = 1 (implicit feedback)
-        df['rating'] = 1
-    
-    # Оставляем только положительные взаимодействия (rating = 1)
-    df = df[df['rating'] == 1].drop(columns=['rating'])
+        # Если рейтингов нет, все взаимодействия считаются положительными (implicit feedback)
+        # Это нормально для датасетов типа Gowalla, где есть только check-ins без рейтингов
+        print(f"  Рейтинги отсутствуют - все взаимодействия считаются положительными (implicit feedback)")
+        pass
     
     print(f"Бинаризация завершена: {len(df)} положительных взаимодействий")
     
@@ -104,12 +125,14 @@ def normalize_ids(
     df: pd.DataFrame,
     user_col: str = 'userId',
     item_col: str = 'itemId'
-) -> Tuple[pd.DataFrame, Dict[int, int], Dict[int, int]]:
+) -> Tuple[pd.DataFrame, Dict, Dict]:
     """
     Нормализует ID пользователей и айтемов, приводя их к последовательным числам от 0.
     
     Это необходимо, потому что исходные ID могут быть не последовательными
     (например, 1, 5, 100, 1000), а для работы с embeddings нужны индексы 0, 1, 2, 3...
+    
+    Поддерживает как числовые, так и строковые ID (например, ISBN в Book-Crossing).
     
     Args:
         df: DataFrame с колонками userId и itemId
@@ -124,11 +147,12 @@ def normalize_ids(
     """
     df = df.copy()
     
-    # Получаем уникальные ID
+    # Получаем уникальные ID (могут быть числами или строками)
     unique_users = sorted(df[user_col].unique())
     unique_items = sorted(df[item_col].unique())
     
     # Создаем маппинги: старый_id -> новый_id (начиная с 0)
+    # Поддерживаем любые типы ID (int, str, и т.д.)
     user_mapping = {old_id: new_id for new_id, old_id in enumerate(unique_users)}
     item_mapping = {old_id: new_id for new_id, old_id in enumerate(unique_items)}
     
@@ -181,13 +205,28 @@ def get_statistics(df: pd.DataFrame, user_col: str = 'userId', item_col: str = '
     Returns:
         Словарь со статистикой
     """
+    num_interactions = len(df)
+    num_users = df[user_col].nunique() if not df.empty else 0
+    num_items = df[item_col].nunique() if not df.empty else 0
+    
+    # Вычисляем статистику с проверкой на деление на ноль
+    if num_users > 0 and num_items > 0:
+        sparsity = 1 - num_interactions / (num_users * num_items)
+        avg_interactions_per_user = num_interactions / num_users
+        avg_interactions_per_item = num_interactions / num_items
+    else:
+        # Если нет пользователей или айтемов, устанавливаем значения по умолчанию
+        sparsity = 1.0
+        avg_interactions_per_user = 0.0
+        avg_interactions_per_item = 0.0
+    
     stats = {
-        'num_interactions': len(df),
-        'num_users': df[user_col].nunique(),
-        'num_items': df[item_col].nunique(),
-        'sparsity': 1 - len(df) / (df[user_col].nunique() * df[item_col].nunique()),
-        'avg_interactions_per_user': len(df) / df[user_col].nunique(),
-        'avg_interactions_per_item': len(df) / df[item_col].nunique(),
+        'num_interactions': num_interactions,
+        'num_users': num_users,
+        'num_items': num_items,
+        'sparsity': sparsity,
+        'avg_interactions_per_user': avg_interactions_per_user,
+        'avg_interactions_per_item': avg_interactions_per_item,
     }
     
     return stats

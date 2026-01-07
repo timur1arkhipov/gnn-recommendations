@@ -2,7 +2,7 @@
 Основной класс для работы с датасетами рекомендательных систем.
 
 Поддерживает:
-- Загрузку данных из разных форматов (MovieLens, Amazon Books, Gowalla)
+- Загрузку данных из разных форматов (MovieLens, Book-Crossing, Gowalla)
 - Препроцессинг (фильтрация, бинаризация, нормализация ID)
 - Разделение на train/valid/test (temporal или random split)
 - Построение bipartite графов
@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import yaml
 import json
+import torch
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 import scipy.sparse as sp
@@ -32,6 +33,7 @@ from .graph_builder import (
     load_adjacency_matrix,
     convert_to_torch_sparse
 )
+from .loaders import get_loader
 
 
 class RecommendationDataset:
@@ -60,7 +62,27 @@ class RecommendationDataset:
         
         # Загружаем конфигурацию
         if config_path is None:
-            config_path = self.root_dir / "config" / "datasets" / f"{name}.yaml"
+            # Маппинг имен датасетов на имена конфигурационных файлов
+            config_name_mapping = {
+                'movie_lens': 'movielens1m',
+                'movielens1m': 'movielens1m',
+                'book_crossing': 'book_crossing',
+                'book-crossing': 'book_crossing',
+                'gowalla': 'gowalla',
+                'yelp2018': 'yelp2018',
+            }
+            
+            # Получаем имя конфига из маппинга или используем исходное имя
+            config_name = config_name_mapping.get(name, name)
+            config_path = self.root_dir / "config" / "datasets" / f"{config_name}.yaml"
+        
+        # Проверяем существование файла
+        if not config_path.exists():
+            raise FileNotFoundError(
+                f"Конфигурационный файл не найден: {config_path}\n"
+                f"Доступные файлы в {self.root_dir / 'config' / 'datasets'}: "
+                f"{list((self.root_dir / 'config' / 'datasets').glob('*.yaml'))}"
+            )
         
         with open(config_path, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
@@ -94,12 +116,10 @@ class RecommendationDataset:
     
     def load_raw_data(self) -> pd.DataFrame:
         """
-        Загружает сырые данные из файлов.
+        Загружает сырые данные из файлов используя соответствующий загрузчик.
         
-        Поддерживает разные форматы датасетов:
-        - MovieLens: ratings.csv
-        - Amazon Books: нужно найти файл с рейтингами
-        - Gowalla: Gowalla_cleanCheckins.csv или Gowalla_totalCheckins.txt
+        Каждый датасет имеет свой загрузчик, который знает формат данных
+        и преобразует их в единый формат: userId, itemId, rating (опционально), timestamp (опционально)
         
         Returns:
             DataFrame с колонками: userId, itemId, rating (опционально), timestamp (опционально)
@@ -108,97 +128,40 @@ class RecommendationDataset:
         print(f"Загрузка данных: {self.name}")
         print(f"{'='*60}")
         
-        if self.name == 'movielens1m' or self.name == 'movie_lens':
-            # MovieLens формат: userId, movieId, rating, timestamp
-            # Пробуем разные варианты путей
-            ratings_file = self.raw_data_path / "ratings.csv"
-            if not ratings_file.exists():
-                # Пробуем альтернативные пути
-                ratings_file = self.raw_data_path.parent / "movie_lens" / "ratings.csv"
-            if not ratings_file.exists():
-                # Еще один вариант
-                ratings_file = self.root_dir / "data" / "raw" / "movie_lens" / "ratings.csv"
-            
-            df = pd.read_csv(ratings_file)
-            # Переименовываем колонки для единообразия
-            df = df.rename(columns={'movieId': 'itemId'})
-            print(f"Загружено {len(df)} взаимодействий из MovieLens")
+        # Получаем соответствующий загрузчик для датасета
+        try:
+            loader = get_loader(self.name)
+        except ValueError as e:
+            raise ValueError(
+                f"Не удалось найти загрузчик для датасета '{self.name}'\n"
+                f"{e}"
+            )
         
-        elif self.name == 'amazon_book' or self.name == 'amazon_books':
-            # Amazon Books - нужно найти файл с рейтингами
-            # Пробуем разные варианты путей
-            books_file = self.raw_data_path / "Books_df.csv"
-            if not books_file.exists():
-                books_file = self.raw_data_path.parent / "amazon_books" / "Books_df.csv"
-            if not books_file.exists():
-                books_file = self.root_dir / "data" / "raw" / "amazon_books" / "Books_df.csv"
-            
-            if books_file.exists():
-                # Если есть файл с рейтингами, загружаем его
-                # Иначе создаем синтетические данные на основе Books_df
-                print("Внимание: Amazon Books требует файл с рейтингами пользователей")
-                print("Проверяем наличие файла с рейтингами...")
-                # TODO: Добавить загрузку реальных рейтингов, если они есть
-                # Пока создаем заглушку
-                df = pd.DataFrame(columns=['userId', 'itemId', 'rating'])
-                print("Используется заглушка - нужно будет добавить реальные данные")
-            else:
-                raise FileNotFoundError(f"Файл не найден: {books_file}")
+        # Загружаем данные через загрузчик
+        # Загрузчик знает формат конкретного датасета и преобразует его в единый формат
+        df = loader.load(self.raw_data_path)
         
-        elif self.name == 'gowalla':
-            # Gowalla - check-ins
-            # Пробуем разные варианты путей
-            checkins_file = self.raw_data_path / "Gowalla_cleanCheckins.csv"
-            if not checkins_file.exists():
-                checkins_file = self.raw_data_path / "Gowalla_totalCheckins.txt"
-            if not checkins_file.exists():
-                checkins_file = self.raw_data_path.parent / "gowalla" / "Gowalla_cleanCheckins.csv"
-            if not checkins_file.exists():
-                checkins_file = self.raw_data_path.parent / "gowalla" / "Gowalla_totalCheckins.txt"
-            if not checkins_file.exists():
-                checkins_file = self.root_dir / "data" / "raw" / "gowalla" / "Gowalla_cleanCheckins.csv"
-            if not checkins_file.exists():
-                checkins_file = self.root_dir / "data" / "raw" / "gowalla" / "Gowalla_totalCheckins.txt"
-            
-            if checkins_file.exists():
-                # Gowalla формат может быть разным, нужно адаптировать
-                if checkins_file.suffix == '.csv':
-                    df = pd.read_csv(checkins_file)
-                    # Предполагаем формат: userId, itemId (locationId), timestamp
-                    if 'userId' not in df.columns:
-                        # Пробуем определить колонки автоматически
-                        print("Автоопределение формата Gowalla...")
-                        # TODO: Адаптировать под реальный формат
-                        df = pd.DataFrame(columns=['userId', 'itemId'])
-                else:
-                    # .txt файл - читаем построчно
-                    # Формат обычно: userId itemId timestamp
-                    data = []
-                    with open(checkins_file, 'r') as f:
-                        for line in f:
-                            parts = line.strip().split()
-                            if len(parts) >= 2:
-                                data.append({
-                                    'userId': int(parts[0]),
-                                    'itemId': int(parts[1]),
-                                    'timestamp': int(parts[2]) if len(parts) > 2 else 0
-                                })
-                    df = pd.DataFrame(data)
-                print(f"Загружено {len(df)} check-ins из Gowalla")
-            else:
-                raise FileNotFoundError(f"Файл не найден: {checkins_file}")
+        # Проверяем, что данные загружены и имеют нужные колонки
+        if df.empty:
+            raise ValueError(
+                f"Данные не загружены или пусты для датасета {self.name}!\n"
+                f"Проверьте наличие файлов в: {self.raw_data_path}"
+            )
         
-        else:
-            raise ValueError(f"Неизвестный датасет: {self.name}")
+        if 'userId' not in df.columns or 'itemId' not in df.columns:
+            raise ValueError(
+                f"Загруженные данные не содержат нужных колонок!\n"
+                f"Ожидаются: userId, itemId\n"
+                f"Найдены: {list(df.columns)}"
+            )
         
         # Сохраняем сырые данные
         self.raw_data = df
         
         print(f"Загружено: {len(df)} строк")
-        if not df.empty:
-            print(f"Колонки: {list(df.columns)}")
-            print(f"Пользователей: {df['userId'].nunique() if 'userId' in df.columns else 'N/A'}")
-            print(f"Айтемов: {df['itemId'].nunique() if 'itemId' in df.columns else 'N/A'}")
+        print(f"Колонки: {list(df.columns)}")
+        print(f"Пользователей: {df['userId'].nunique()}")
+        print(f"Айтемов: {df['itemId'].nunique()}")
         
         return df
     
@@ -228,9 +191,19 @@ class RecommendationDataset:
         
         df = self.raw_data.copy()
         
+        # Проверяем, что данные не пустые
+        if df.empty:
+            raise ValueError(
+                f"Данные пусты! Проверьте, что файлы с данными существуют и содержат информацию.\n"
+                f"Для {self.name} проверьте наличие файлов в: {self.raw_data_path}"
+            )
+        
         # Проверяем наличие необходимых колонок
         if 'userId' not in df.columns or 'itemId' not in df.columns:
-            raise ValueError("DataFrame должен содержать колонки 'userId' и 'itemId'")
+            raise ValueError(
+                f"DataFrame должен содержать колонки 'userId' и 'itemId'.\n"
+                f"Найденные колонки: {list(df.columns)}"
+            )
         
         # 1. Удаляем дубликаты
         print("\n1. Удаление дубликатов...")
@@ -247,10 +220,25 @@ class RecommendationDataset:
             min_item_interactions=min_item
         )
         
+        # Проверяем, что после фильтрации остались данные
+        if df.empty:
+            raise ValueError(
+                f"После фильтрации данных не осталось!\n"
+                f"Попробуйте уменьшить min_user_interactions или min_item_interactions.\n"
+                f"Текущие значения: min_user={min_user}, min_item={min_item}"
+            )
+        
         # 3. Бинаризация (implicit feedback)
         print("\n3. Бинаризация взаимодействий...")
         rating_col = 'rating' if 'rating' in df.columns else None
         df = binarize_interactions(df, rating_col=rating_col, threshold=rating_threshold)
+        
+        # Проверяем, что после бинаризации остались данные
+        if df.empty:
+            raise ValueError(
+                f"После бинаризации данных не осталось!\n"
+                f"Возможно, все рейтинги были ниже порога threshold={rating_threshold}."
+            )
         
         # 4. Нормализация ID (приведение к последовательным числам от 0)
         print("\n4. Нормализация ID...")

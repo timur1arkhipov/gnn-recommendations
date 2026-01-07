@@ -1,7 +1,7 @@
-# Настройки датасета Amazon-Book
+# Настройки датасета Book-Crossing
 
-name: "amazon_books"
-data_path: "data/raw/amazon_books"
+name: "book_crossing"
+data_path: "data/raw/book-crossing"
 
 # Фильтрация
 filtering:

@@ -11,10 +11,18 @@
 import sys
 from pathlib import Path
 
-# Добавляем путь к src в PYTHONPATH
-project_root = Path(__file__).parent.parent
+# Определяем корневую директорию проекта (gnn-recommendations)
+# Скрипт находится в gnn-recommendations/scripts/, поэтому parent.parent = gnn-recommendations
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent  # gnn-recommendations/
+
+# Добавляем путь к src в PYTHONPATH, чтобы можно было импортировать модули
 sys.path.insert(0, str(project_root / "src"))
 
+import pandas as pd
+import numpy as np
+import yaml
+# Теперь можно импортировать модули из src
 from data import RecommendationDataset
 
 
@@ -74,17 +82,24 @@ if __name__ == "__main__":
         "--dataset",
         type=str,
         default="movie_lens",
-        choices=["movie_lens", "amazon_books", "gowalla"],
+        choices=["movie_lens", "book_crossing", "book-crossing", "gowalla"],
         help="Название датасета"
     )
     parser.add_argument(
         "--root_dir",
         type=str,
-        default=".",
-        help="Корневая директория проекта"
+        default=None,
+        help="Корневая директория проекта (по умолчанию определяется автоматически)"
     )
     
     args = parser.parse_args()
+    
+    # Если root_dir не указан, используем автоматическое определение
+    if args.root_dir is None:
+        args.root_dir = str(project_root)
+    else:
+        # Преобразуем в абсолютный путь
+        args.root_dir = str(Path(args.root_dir).resolve())
     
     try:
         dataset = prepare_dataset(args.dataset, args.root_dir)

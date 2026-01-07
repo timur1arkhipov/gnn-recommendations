@@ -15,6 +15,7 @@ from .graph_builder import (
     save_adjacency_matrix,
     load_adjacency_matrix
 )
+from .loaders import get_loader, BaseDatasetLoader, LOADER_REGISTRY
 
 __all__ = [
     'RecommendationDataset',
@@ -28,4 +29,7 @@ __all__ = [
     'convert_to_torch_sparse',
     'save_adjacency_matrix',
     'load_adjacency_matrix',
+    'get_loader',
+    'BaseDatasetLoader',
+    'LOADER_REGISTRY',
 ]
