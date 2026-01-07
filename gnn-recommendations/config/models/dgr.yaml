@@ -1,13 +1,23 @@
-# Настройки модели DGR
+# Конфигурация для DGR модели
 
+model_name: "dgr"
+
+# Параметры модели
 model:
-  name: "DGR"
   embedding_dim: 64
   n_layers: 3
-  
-  # DGR параметры
-  # (будут добавлены при реализации)
-  
-  # Инициализация
-  init_method: "xavier_uniform"
+  lambda_reg: 0.1     # Коэффициент регуляризации для desmoothing
+  dropout: 0.0
+  init_scale: 0.01
 
+# Параметры обучения
+training:
+  learning_rate: 0.001
+  weight_decay: 1e-4
+  batch_size: 2048
+  epochs: 300
+  early_stopping:
+    patience: 20
+    min_delta: 0.0001
+  
+  negative_samples: 1

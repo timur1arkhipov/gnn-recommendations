@@ -1,10 +1,21 @@
-# Настройки модели LightGCN
+# Конфигурация для LightGCN модели
 
+model_name: "lightgcn"
+
+# Параметры модели
 model:
-  name: "LightGCN"
   embedding_dim: 64
   n_layers: 3
-  
-  # Инициализация
-  init_method: "xavier_uniform"
+  init_scale: 0.01
 
+# Параметры обучения
+training:
+  learning_rate: 0.001
+  weight_decay: 1e-4
+  batch_size: 2048
+  epochs: 300
+  early_stopping:
+    patience: 20
+    min_delta: 0.0001
+  
+  negative_samples: 1
