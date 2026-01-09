@@ -1,35 +1,39 @@
-# Общие настройки обучения
+# Общие настройки обучения для всех моделей
 
-# Оптимизатор
-optimizer:
-  name: "adam"
-  lr: 0.001
-  weight_decay: 0.0001
+# Параметры оптимизатора
+learning_rate: 0.001
+weight_decay: 1e-4
 
-# Обучение
-training:
-  batch_size: 2048
-  num_epochs: 200
-  eval_every: 5
-  early_stopping:
-    patience: 20
-    min_delta: 0.0001
-    monitor: "recall@10"
+# Параметры обучения
+batch_size: 2048
+epochs: 300
+eval_every: 10  # Валидация каждые N эпох
 
-# Loss
-loss:
-  type: "bpr"
-  negative_sampling:
-    num_negatives: 1
+# Сэмплирование
+negative_samples: 1  # Количество отрицательных примеров на положительный
 
-# Валидация
-validation:
-  k_values: [10, 20, 50]
-  num_workers: 4
+# Early stopping
+early_stopping:
+  patience: 20  # Количество эпох без улучшения перед остановкой
+  min_delta: 0.0001  # Минимальное улучшение для сброса patience
 
-# Устройство
-device: "cuda"  # или "cpu"
+# Сохранение
+checkpoint_dir: "results/checkpoints"
+save_best_only: true  # Сохранять только лучшую модель
 
-# Random seed
-seed: 42
+# Логирование
+log_dir: "results/logs"
+log_every: 10  # Логировать каждые N эпох
 
+# Метрики для валидации
+validation_metrics:
+  - recall@10
+  - recall@20
+  - recall@50
+  - ndcg@10
+  - ndcg@20
+  - ndcg@50
+  - coverage
+
+# Метрика для early stopping
+early_stopping_metric: "recall@10"
