@@ -6,16 +6,21 @@ model_name: "lightgcn"
 model:
   embedding_dim: 64
   n_layers: 3
-  init_scale: 0.01
+  init_scale: 0.1  # Увеличено с 0.01 для лучшей инициализации
 
 # Параметры обучения
 training:
-  learning_rate: 0.001
-  weight_decay: 1e-4
+  learning_rate: 0.0001  # Уменьшено с 0.001 для стабильности GNN
+  weight_decay: 1e-5  # Уменьшено для меньшей регуляризации
   batch_size: 2048
   epochs: 300
   early_stopping:
-    patience: 20
-    min_delta: 0.0001
+    patience: 50  # Увеличено с 20 для более долгого обучения
+    min_delta: 0.00001  # Уменьшено для более чувствительного early stopping
   
   negative_samples: 1
+  
+  # Learning rate scheduling
+  use_scheduler: true
+  warmup_epochs: 5
+  max_grad_norm: 1.0

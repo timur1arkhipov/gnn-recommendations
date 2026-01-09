@@ -75,6 +75,21 @@ class Trainer:
             weight_decay=weight_decay
         )
         
+        # Learning rate scheduler с warmup
+        self.use_scheduler = config.get('use_scheduler', True)
+        self.warmup_epochs = int(config.get('warmup_epochs', 5))
+        self.base_lr = learning_rate
+        
+        if self.use_scheduler:
+            # Cosine annealing scheduler после warmup
+            self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer,
+                T_max=self.epochs - self.warmup_epochs,
+                eta_min=learning_rate * 0.01
+            )
+        else:
+            self.scheduler = None
+        
         # Loss функция
         base_loss = BPRLoss()
         if weight_decay > 0:
@@ -87,6 +102,9 @@ class Trainer:
         self.epochs = int(config.get('epochs', 300))
         self.eval_every = int(config.get('eval_every', 10))
         self.negative_samples = int(config.get('negative_samples', 1))
+        
+        # Gradient clipping для стабильности обучения GNN
+        self.max_grad_norm = float(config.get('max_grad_norm', 1.0))
         
         # Early stopping (преобразуем в правильные типы)
         self.early_stopping = config.get('early_stopping', {})
@@ -256,13 +274,17 @@ class Trainer:
             # Backward
             self.optimizer.zero_grad()
             loss.backward()
+            
+            # Gradient clipping для стабильности
+            if self.max_grad_norm > 0:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
+            
             self.optimizer.step()
             
-            # Обновляем embeddings (если модель изменилась)
-            # Для эффективности можно обновлять реже
-            if batch_idx % 100 == 0:
-                with torch.no_grad():
-                    user_emb, item_emb = self.model(adj_matrix)
+            # ВАЖНО: Обновляем embeddings после каждого батча
+            # Иначе мы используем старые embeddings и модель не обучается
+            with torch.no_grad():
+                user_emb, item_emb = self.model(adj_matrix)
             
             total_loss += loss.item()
             n_batches += 1
@@ -344,6 +366,16 @@ class Trainer:
         for epoch in range(1, self.epochs + 1):
             self.current_epoch = epoch
             
+            # Learning rate warmup
+            if epoch <= self.warmup_epochs:
+                # Линейный warmup от 0 до base_lr
+                warmup_lr = self.base_lr * (epoch / self.warmup_epochs)
+                for param_group in self.optimizer.param_groups:
+                    param_group['lr'] = warmup_lr
+            elif self.scheduler is not None and epoch > self.warmup_epochs:
+                # После warmup используем scheduler
+                self.scheduler.step()
+            
             # Обучение
             train_loss = self.train_epoch()
             self.train_losses.append(train_loss)
@@ -356,8 +388,12 @@ class Trainer:
                 # Основная метрика для early stopping (Recall@10)
                 current_metric = valid_metrics.get('recall@10', 0.0)
                 
+                # Текущий learning rate
+                current_lr = self.optimizer.param_groups[0]['lr']
+                
                 # Логирование
                 print(f"Epoch {epoch:3d}/{self.epochs} | "
+                      f"LR: {current_lr:.6f} | "
                       f"Train Loss: {train_loss:.4f} | "
                       f"Recall@10: {current_metric:.4f} | "
                       f"NDCG@10: {valid_metrics.get('ndcg@10', 0.0):.4f}")

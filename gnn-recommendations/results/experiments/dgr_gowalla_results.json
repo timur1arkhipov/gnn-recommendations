@@ -1,0 +1,14 @@
+[
+  {
+    "model": "dgr",
+    "dataset": "gowalla",
+    "seed": 42,
+    "status": "failed",
+    "error": "CUDA out of memory. Tried to allocate 13.24 GiB. GPU 0 has a total capacity of 8.00 GiB of which 0 bytes is free. Of the allocated memory 197.63 MiB is allocated by PyTorch, and 13.29 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)",
+    "training_time": null,
+    "best_epoch": null,
+    "best_metric": null,
+    "test_metrics": null,
+    "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\timur\\OneDrive\\Документы\\diploma\\gnn-recommendations\\scripts\\run_all_experiments.py\", line 219, in train_and_evaluate\n    training_results = trainer.train()\n  File \"C:\\Users\\timur\\OneDrive\\Документы\\diploma\\gnn-recommendations\\src\\training\\trainer.py\", line 353, in train\n    valid_metrics = self.validate()\n  File \"C:\\Users\\timur\\OneDrive\\Документы\\diploma\\gnn-recommendations\\src\\training\\trainer.py\", line 288, in validate\n    scores = user_emb @ item_emb.T  # [n_users, n_items]\n             ~~~~~~~~~^~~~~~~~~~~~\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 13.24 GiB. GPU 0 has a total capacity of 8.00 GiB of which 0 bytes is free. Of the allocated memory 197.63 MiB is allocated by PyTorch, and 13.29 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n"
+  }
+]
