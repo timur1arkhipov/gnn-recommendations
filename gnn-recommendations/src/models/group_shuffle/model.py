@@ -6,7 +6,7 @@ GroupShuffleGNN - основная модель с применением мет
 
 import torch
 import torch.nn as nn
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 from ..base import BaseRecommender
 from .layers import GroupShuffleLayer
@@ -224,4 +224,41 @@ class GroupShuffleGNN(BaseRecommender):
             error = layer.get_orthogonality_error()
             errors.append(error)
         return torch.stack(errors)
+    
+    def get_layer_embeddings(
+        self,
+        adj_matrix: torch.Tensor
+    ) -> List[torch.Tensor]:
+        """
+        Получить embeddings для каждого слоя (для анализа over-smoothing).
+        
+        Args:
+            adj_matrix: normalized adjacency matrix [N, N]
+        
+        Returns:
+            Список тензоров embeddings для каждого слоя [n_layers+1]
+            Каждый тензор имеет размер [N, embedding_dim]
+        """
+        # Начальные embeddings
+        x = torch.cat([
+            self.user_embedding.weight,
+            self.item_embedding.weight
+        ], dim=0)  # [N, embedding_dim]
+        
+        all_embeddings = [x.clone()]
+        
+        # Проходим через каждый слой
+        for layer in self.layers:
+            # Графовая свертка
+            if adj_matrix.is_sparse:
+                x_conv = torch.sparse.mm(adj_matrix, x)
+            else:
+                x_conv = torch.mm(adj_matrix, x)
+            
+            # Применяем GroupShuffleLayer
+            x = layer(x_conv, x)
+            
+            all_embeddings.append(x.clone())
+        
+        return all_embeddings
 

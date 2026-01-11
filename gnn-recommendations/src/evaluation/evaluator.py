@@ -13,15 +13,9 @@ import numpy as np
 from typing import Dict, List, Optional
 from collections import defaultdict
 
-# Импорты - поддерживаем оба варианта импорта
-try:
-    # Сначала пробуем абсолютный импорт (когда src в sys.path)
-    from training.metrics import compute_all_metrics
-    from data import RecommendationDataset
-except ImportError:
-    # Если не работает, пробуем относительный (когда импортируем как модуль)
-    from ..training.metrics import compute_all_metrics
-    from ..data import RecommendationDataset
+# Импорты
+from ..training.metrics import compute_all_metrics
+from ..data.dataset import RecommendationDataset
 
 
 class Evaluator:

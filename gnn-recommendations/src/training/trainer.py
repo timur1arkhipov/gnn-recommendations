@@ -21,8 +21,8 @@ from collections import defaultdict
 from .losses import BPRLoss, RegularizedLoss
 from .metrics import compute_all_metrics
 
-# Импорт датасета - поддерживаем оба варианта импорта
-from data import RecommendationDataset
+# Импорт датасета
+from ..data.dataset import RecommendationDataset
 
 
 class Trainer:
@@ -69,6 +69,12 @@ class Trainer:
         learning_rate = float(config.get('learning_rate', 0.001))
         weight_decay = float(config.get('weight_decay', 1e-4))
         
+        # Параметры обучения (преобразуем в правильные типы) - СНАЧАЛА!
+        self.batch_size = int(config.get('batch_size', 2048))
+        self.epochs = int(config.get('epochs', 300))
+        self.eval_every = int(config.get('eval_every', 10))
+        self.negative_samples = int(config.get('negative_samples', 1))
+        
         self.optimizer = optim.Adam(
             self.model.parameters(),
             lr=learning_rate,
@@ -96,12 +102,6 @@ class Trainer:
             self.loss_fn = RegularizedLoss(base_loss, weight_decay)
         else:
             self.loss_fn = base_loss
-        
-        # Параметры обучения (преобразуем в правильные типы)
-        self.batch_size = int(config.get('batch_size', 2048))
-        self.epochs = int(config.get('epochs', 300))
-        self.eval_every = int(config.get('eval_every', 10))
-        self.negative_samples = int(config.get('negative_samples', 1))
         
         # Gradient clipping для стабильности обучения GNN
         self.max_grad_norm = float(config.get('max_grad_norm', 1.0))

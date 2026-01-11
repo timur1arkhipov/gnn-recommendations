@@ -9,7 +9,7 @@ LightGCN - упрощенная версия GCN для рекомендател
 
 import torch
 import torch.nn as nn
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 from ..base import BaseRecommender
 
@@ -149,4 +149,36 @@ class LightGCN(BaseRecommender):
             raise ValueError("adj_matrix должен быть передан для LightGCN")
         
         return self.forward(adj_matrix)
+    
+    def get_layer_embeddings(
+        self,
+        adj_matrix: torch.Tensor
+    ) -> List[torch.Tensor]:
+        """
+        Получить embeddings для каждого слоя (для анализа over-smoothing).
+        
+        Args:
+            adj_matrix: normalized adjacency matrix [N, N]
+        
+        Returns:
+            Список тензоров embeddings для каждого слоя [n_layers+1]
+            Каждый тензор имеет размер [N, embedding_dim]
+        """
+        # Начальные embeddings
+        x = torch.cat([
+            self.user_embedding.weight,
+            self.item_embedding.weight
+        ], dim=0)
+        
+        all_embeddings = [x.clone()]
+        
+        # Графовая свертка через n_layers слоев
+        for _ in range(self.n_layers):
+            if adj_matrix.is_sparse:
+                x = torch.sparse.mm(adj_matrix, x)
+            else:
+                x = torch.mm(adj_matrix, x)
+            all_embeddings.append(x.clone())
+        
+        return all_embeddings
 

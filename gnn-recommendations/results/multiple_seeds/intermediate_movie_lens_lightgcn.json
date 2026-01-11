@@ -1,0 +1,102 @@
+[
+  {
+    "status": "success",
+    "seed": 42,
+    "model": "lightgcn",
+    "dataset": "movie_lens",
+    "training_time": 387.3042697906494,
+    "best_epoch": 110,
+    "metrics": {
+      "recall@10": 0.0035845181727668166,
+      "ndcg@10": 0.044278343039761296,
+      "precision@10": 0.0432,
+      "recall@20": 0.007711919352290621,
+      "ndcg@20": 0.045317689401395286,
+      "precision@20": 0.045200000000000004,
+      "recall@50": 0.028279464755241786,
+      "ndcg@50": 0.05567428166859588,
+      "precision@50": 0.053759999999999995,
+      "coverage": 0.35698545614808286
+    }
+  },
+  {
+    "status": "success",
+    "seed": 43,
+    "model": "lightgcn",
+    "dataset": "movie_lens",
+    "training_time": 380.3965425491333,
+    "best_epoch": 10,
+    "metrics": {
+      "recall@10": 0.004951103796120598,
+      "ndcg@10": 0.06023341263668767,
+      "precision@10": 0.0584,
+      "recall@20": 0.008696294028265937,
+      "ndcg@20": 0.06113460744305907,
+      "precision@20": 0.0604,
+      "recall@50": 0.024878625437852495,
+      "ndcg@50": 0.06706918767241639,
+      "precision@50": 0.06496,
+      "coverage": 0.373292199206699
+    }
+  },
+  {
+    "status": "success",
+    "seed": 44,
+    "model": "lightgcn",
+    "dataset": "movie_lens",
+    "training_time": 384.7042672634125,
+    "best_epoch": 60,
+    "metrics": {
+      "recall@10": 0.0035212478726885875,
+      "ndcg@10": 0.05006417533541732,
+      "precision@10": 0.05359999999999999,
+      "recall@20": 0.00693028313592953,
+      "ndcg@20": 0.051215648716676256,
+      "precision@20": 0.0536,
+      "recall@50": 0.020828637794956445,
+      "ndcg@50": 0.05717372772379645,
+      "precision@50": 0.05776,
+      "coverage": 0.38078448655795505
+    }
+  },
+  {
+    "status": "success",
+    "seed": 45,
+    "model": "lightgcn",
+    "dataset": "movie_lens",
+    "training_time": 370.8056392669678,
+    "best_epoch": 80,
+    "metrics": {
+      "recall@10": 0.003814561814667926,
+      "ndcg@10": 0.0538494614381675,
+      "precision@10": 0.0576,
+      "recall@20": 0.007631968208207885,
+      "ndcg@20": 0.05478189556434398,
+      "precision@20": 0.05679999999999999,
+      "recall@50": 0.023032506704422463,
+      "ndcg@50": 0.05998799188177123,
+      "precision@50": 0.05968,
+      "coverage": 0.375936535918907
+    }
+  },
+  {
+    "status": "success",
+    "seed": 46,
+    "model": "lightgcn",
+    "dataset": "movie_lens",
+    "training_time": 365.4213991165161,
+    "best_epoch": 20,
+    "metrics": {
+      "recall@10": 0.003921471082905904,
+      "ndcg@10": 0.05005848433217312,
+      "precision@10": 0.048,
+      "recall@20": 0.008581557354722736,
+      "ndcg@20": 0.052507948169286923,
+      "precision@20": 0.052399999999999995,
+      "recall@50": 0.02698349447664451,
+      "ndcg@50": 0.05895031068060975,
+      "precision@50": 0.05584,
+      "coverage": 0.36888497135301895
+    }
+  }
+]

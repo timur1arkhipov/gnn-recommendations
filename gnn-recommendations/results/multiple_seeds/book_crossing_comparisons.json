@@ -1,0 +1,162 @@
+{
+  "bpr_mf": {
+    "recall@10": {
+      "mean_a": 0.0005163481867847261,
+      "std_a": 0.0,
+      "mean_b": 0.0005163481867847261,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "ndcg@10": {
+      "mean_a": 0.0006064028784950756,
+      "std_a": 0.0,
+      "mean_b": 0.0006064028784950756,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "precision@10": {
+      "mean_a": 0.0003652090341182124,
+      "std_a": 0.0,
+      "mean_b": 0.0003652090341182124,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    }
+  },
+  "lightgcn": {
+    "recall@10": {
+      "mean_a": 0.0005163481867847261,
+      "std_a": 0.0,
+      "mean_b": 0.0005163481867847261,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "ndcg@10": {
+      "mean_a": 0.0006064028784950756,
+      "std_a": 0.0,
+      "mean_b": 0.0006064028784950756,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "precision@10": {
+      "mean_a": 0.0003652090341182124,
+      "std_a": 0.0,
+      "mean_b": 0.0003652090341182124,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    }
+  },
+  "gcnii": {
+    "recall@10": {
+      "mean_a": 0.0005163481867847261,
+      "std_a": 0.0,
+      "mean_b": 0.0005163481867847261,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "ndcg@10": {
+      "mean_a": 0.0006064028784950756,
+      "std_a": 0.0,
+      "mean_b": 0.0006064028784950756,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "precision@10": {
+      "mean_a": 0.0003652090341182124,
+      "std_a": 0.0,
+      "mean_b": 0.0003652090341182124,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    }
+  },
+  "dgr": {
+    "recall@10": {
+      "mean_a": 0.0005163481867847261,
+      "std_a": 0.0,
+      "mean_b": 0.0005163481867847261,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "ndcg@10": {
+      "mean_a": 0.0006064028784950756,
+      "std_a": 0.0,
+      "mean_b": 0.0006064028784950756,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "precision@10": {
+      "mean_a": 0.0003652090341182124,
+      "std_a": 0.0,
+      "mean_b": 0.0003652090341182124,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    }
+  },
+  "groupshuffle_gnn": {
+    "recall@10": {
+      "mean_a": 0.0005163481867847261,
+      "std_a": 0.0,
+      "mean_b": 0.0005163481867847261,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "ndcg@10": {
+      "mean_a": 0.0006064028784950756,
+      "std_a": 0.0,
+      "mean_b": 0.0006064028784950756,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    },
+    "precision@10": {
+      "mean_a": 0.0003652090341182124,
+      "std_a": 0.0,
+      "mean_b": 0.0003652090341182124,
+      "std_b": 0.0,
+      "t_stat": NaN,
+      "p_value": NaN,
+      "significant": false,
+      "improvement": 0.0
+    }
+  }
+}

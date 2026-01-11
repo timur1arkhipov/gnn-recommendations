@@ -24,14 +24,14 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 
 # Добавляем путь к src в PYTHONPATH
-sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root))
 
-from models import (
+from src.models import (
     BPR_MF, LightGCN, GCNII, DGR, SVD_GCN, LayerGCN, GroupShuffleGNN
 )
-from data import RecommendationDataset
-from training import Trainer
-from evaluation import Evaluator
+from src.data import RecommendationDataset
+from src.training import Trainer
+from src.evaluation import Evaluator
 
 
 # Регистр моделей
