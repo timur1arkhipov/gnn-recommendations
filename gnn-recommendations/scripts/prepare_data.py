@@ -103,9 +103,9 @@ if __name__ == "__main__":
     
     try:
         dataset = prepare_dataset(args.dataset, args.root_dir)
-        print("✅ Успешно!")
+        print(" Успешно!")
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        print(f" Ошибка: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

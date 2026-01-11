@@ -34,14 +34,14 @@ def run_command(description, command, cwd=None):
             text=True,
             capture_output=False
         )
-        print(f"\n✅ {description} - УСПЕШНО")
+        print(f"\n {description} - УСПЕШНО")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ {description} - ОШИБКА")
+        print(f"\n {description} - ОШИБКА")
         print(f"Код возврата: {e.returncode}")
         return False
     except Exception as e:
-        print(f"\n❌ {description} - ОШИБКА: {str(e)}")
+        print(f"\n {description} - ОШИБКА: {str(e)}")
         return False
 
 
@@ -63,7 +63,7 @@ def main():
     args = parser.parse_args()
     
     print("\n" + "="*80)
-    print("🚀 ЗАПУСК ЭКСПЕРИМЕНТОВ ДЛЯ МАГИСТЕРСКОЙ ДИССЕРТАЦИИ")
+    print(" ЗАПУСК ЭКСПЕРИМЕНТОВ ДЛЯ МАГИСТЕРСКОЙ ДИССЕРТАЦИИ")
     print("="*80)
     
     if args.quick:
@@ -111,12 +111,12 @@ def main():
     )
     
     if not success:
-        print("\n❌ КРИТИЧЕСКАЯ ОШИБКА при основных экспериментах!")
+        print("\n КРИТИЧЕСКАЯ ОШИБКА при основных экспериментах!")
         print("Проверьте логи выше для деталей.")
         return 1
     
     # Эксперименты завершены
-    print("\n✅ Основные эксперименты завершены успешно!")
+    print("\n Основные эксперименты завершены успешно!")
     
     # Итоги
     elapsed_time = time.time() - start_time
@@ -124,7 +124,7 @@ def main():
     minutes = int((elapsed_time % 3600) // 60)
     
     print("\n" + "="*80)
-    print("🎉 ВСЕ ЭКСПЕРИМЕНТЫ ЗАВЕРШЕНЫ!")
+    print(" ВСЕ ЭКСПЕРИМЕНТЫ ЗАВЕРШЕНЫ!")
     print("="*80)
     print(f"Общее время: {hours}ч {minutes}мин")
     print("\nРезультаты сохранены в:")
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         print("\n\n⚠️  Прервано пользователем")
         sys.exit(1)
     except Exception as e:
-        print(f"\n\n❌ КРИТИЧЕСКАЯ ОШИБКА: {str(e)}")
+        print(f"\n\n КРИТИЧЕСКАЯ ОШИБКА: {str(e)}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

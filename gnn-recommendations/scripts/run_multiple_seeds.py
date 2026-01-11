@@ -104,7 +104,7 @@ def train_and_evaluate_with_seed(
         evaluator = Evaluator()
         test_metrics = evaluator.evaluate(model, dataset, dataset.test_data)
         
-        print(f"\n✅ Успешно! Recall@10: {test_metrics.get('recall@10', 0):.4f}")
+        print(f"\n Успешно! Recall@10: {test_metrics.get('recall@10', 0):.4f}")
         
         return {
             'status': 'success',
@@ -117,7 +117,7 @@ def train_and_evaluate_with_seed(
         }
         
     except Exception as e:
-        print(f"\n❌ Ошибка: {str(e)}")
+        print(f"\n Ошибка: {str(e)}")
         return {
             'status': 'failed',
             'seed': seed,

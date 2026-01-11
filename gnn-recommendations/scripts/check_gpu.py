@@ -22,10 +22,10 @@ def check_cuda_available():
     print("=" * 60)
     
     is_available = torch.cuda.is_available()
-    print(f"\n✓ CUDA доступна: {is_available}")
+    print(f"\n CUDA доступна: {is_available}")
     
     if not is_available:
-        print("\n❌ CUDA недоступна!")
+        print("\n CUDA недоступна!")
         print("\nВозможные причины:")
         print("1. PyTorch установлен без поддержки CUDA")
         print("2. Драйверы NVIDIA не установлены")
@@ -44,9 +44,9 @@ def check_cuda_info():
     print("ИНФОРМАЦИЯ О CUDA")
     print("=" * 60)
     
-    print(f"\n✓ Версия CUDA: {torch.version.cuda}")
-    print(f"✓ Версия cuDNN: {torch.backends.cudnn.version()}")
-    print(f"✓ Количество GPU: {torch.cuda.device_count()}")
+    print(f"\n Версия CUDA: {torch.version.cuda}")
+    print(f"  Версия cuDNN: {torch.backends.cudnn.version()}")
+    print(f"  Количество GPU: {torch.cuda.device_count()}")
 
 
 def check_gpu_info():
@@ -58,7 +58,7 @@ def check_gpu_info():
     device_count = torch.cuda.device_count()
     
     for i in range(device_count):
-        print(f"\n🎮 GPU {i}:")
+        print(f"\n GPU {i}:")
         print(f"  Название: {torch.cuda.get_device_name(i)}")
         
         props = torch.cuda.get_device_properties(i)
@@ -80,26 +80,26 @@ def test_simple_operation():
     print("=" * 60)
     
     device = torch.device('cuda:0')
-    print(f"\n✓ Используемое устройство: {device}")
+    print(f"\n Используемое устройство: {device}")
     
     # Создаем тензоры на GPU
     print("\n1. Создание тензоров на GPU...")
     x = torch.randn(1000, 1000, device=device)
     y = torch.randn(1000, 1000, device=device)
-    print(f"   ✓ Тензор x: shape={x.shape}, device={x.device}")
-    print(f"   ✓ Тензор y: shape={y.shape}, device={y.device}")
+    print(f"     Тензор x: shape={x.shape}, device={x.device}")
+    print(f"     Тензор y: shape={y.shape}, device={y.device}")
     
     # Матричное умножение
     print("\n2. Матричное умножение на GPU...")
     z = torch.mm(x, y)
-    print(f"   ✓ Результат z: shape={z.shape}, device={z.device}")
+    print(f"     Результат z: shape={z.shape}, device={z.device}")
     
     # Перенос на CPU
     print("\n3. Перенос результата на CPU...")
     z_cpu = z.cpu()
-    print(f"   ✓ Результат на CPU: shape={z_cpu.shape}, device={z_cpu.device}")
+    print(f"     Результат на CPU: shape={z_cpu.shape}, device={z_cpu.device}")
     
-    print("\n✅ Все операции выполнены успешно!")
+    print("\n Все операции выполнены успешно!")
 
 
 def benchmark_speed():
@@ -114,7 +114,7 @@ def benchmark_speed():
     iterations = 10
     
     # CPU
-    print(f"\n⏱️  CPU бенчмарк ({iterations} итераций, матрица {size}x{size})...")
+    print(f"\n  CPU бенчмарк ({iterations} итераций, матрица {size}x{size})...")
     x_cpu = torch.randn(size, size)
     y_cpu = torch.randn(size, size)
     
@@ -143,14 +143,14 @@ def benchmark_speed():
     
     # Сравнение
     speedup = cpu_time / gpu_time
-    print(f"\n🚀 Ускорение: {speedup:.2f}x")
+    print(f"\n Ускорение: {speedup:.2f}x")
     
     if speedup > 5:
-        print("   ✅ Отличное ускорение! GPU работает правильно.")
+        print("    Отличное ускорение! GPU работает правильно.")
     elif speedup > 2:
         print("   ⚠️  Умеренное ускорение. Возможно, есть узкие места.")
     else:
-        print("   ❌ Слабое ускорение. Проверьте настройки GPU.")
+        print("    Слабое ускорение. Проверьте настройки GPU.")
 
 
 def test_model_training():
@@ -180,7 +180,7 @@ def test_model_training():
     
     print("\n1. Создание модели...")
     model = SimpleModel().to(device)
-    print(f"   ✓ Модель на устройстве: {next(model.parameters()).device}")
+    print(f"     Модель на устройстве: {next(model.parameters()).device}")
     
     # Оптимизатор и loss
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -203,7 +203,7 @@ def test_model_training():
         
         print(f"   Батч {i+1}/5: Loss = {loss.item():.4f}")
     
-    print("\n✅ Модель успешно обучается на GPU!")
+    print("\n Модель успешно обучается на GPU!")
 
 
 def check_memory_after_operations():
@@ -217,7 +217,7 @@ def check_memory_after_operations():
         memory_reserved = torch.cuda.memory_reserved(i) / 1024**3
         memory_total = torch.cuda.get_device_properties(i).total_memory / 1024**3
         
-        print(f"\n🎮 GPU {i} ({torch.cuda.get_device_name(i)}):")
+        print(f"\n GPU {i} ({torch.cuda.get_device_name(i)}):")
         print(f"  Выделено: {memory_allocated:.2f} GB")
         print(f"  Зарезервировано: {memory_reserved:.2f} GB")
         print(f"  Всего: {memory_total:.2f} GB")
@@ -226,17 +226,17 @@ def check_memory_after_operations():
 
 def main():
     """Главная функция."""
-    print("\n" + "🚀" * 30)
+    print("\n" + "" * 30)
     print("ПРОВЕРКА GPU ДЛЯ PYTORCH")
-    print("🚀" * 30)
+    print("" * 30)
     
     # Информация о PyTorch
-    print(f"\n📦 Версия PyTorch: {torch.__version__}")
+    print(f"\n Версия PyTorch: {torch.__version__}")
     
     # Проверка CUDA
     if not check_cuda_available():
         print("\n" + "=" * 60)
-        print("❌ ЗАВЕРШЕНИЕ: CUDA недоступна")
+        print(" ЗАВЕРШЕНИЕ: CUDA недоступна")
         print("=" * 60)
         return
     
@@ -253,16 +253,16 @@ def main():
         test_model_training()
         check_memory_after_operations()
     except Exception as e:
-        print(f"\n❌ Ошибка при выполнении тестов: {e}")
+        print(f"\n Ошибка при выполнении тестов: {e}")
         import traceback
         traceback.print_exc()
         return
     
     # Итоговая информация
     print("\n" + "=" * 60)
-    print("✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ УСПЕШНО!")
+    print(" ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ УСПЕШНО!")
     print("=" * 60)
-    print("\nВаша RTX 4060 готова к обучению моделей! 🎉")
+    print("\nВаша RTX 4060 готова к обучению моделей! ")
     print("\nДля запуска обучения:")
     print("  python scripts/train_model.py --model lightgcn --dataset movie_lens")
     print("\nСистема автоматически использует GPU.")

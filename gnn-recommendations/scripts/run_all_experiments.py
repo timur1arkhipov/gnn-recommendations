@@ -233,7 +233,7 @@ def train_and_evaluate(
     except Exception as e:
         result['error'] = str(e)
         result['traceback'] = traceback.format_exc()
-        print(f"❌ Ошибка при обучении {model_name} на {dataset_name}: {e}")
+        print(f" Ошибка при обучении {model_name} на {dataset_name}: {e}")
     
     return result
 
@@ -265,7 +265,7 @@ def save_results(
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(all_results, f, indent=2, ensure_ascii=False)
     
-    print(f"\n✅ Все результаты сохранены в: {output_path}")
+    print(f"\n Все результаты сохранены в: {output_path}")
     
     # Также сохраняем сводную таблицу (CSV)
     csv_path = results_dir / output_file.replace('.json', '.csv')
@@ -319,7 +319,7 @@ def save_summary_csv(all_results: List[Dict], csv_path: Path):
             writer.writeheader()
             writer.writerows(rows)
         
-        print(f"✅ Сводная таблица сохранена в: {csv_path}")
+        print(f" Сводная таблица сохранена в: {csv_path}")
 
 
 def save_individual_results(all_results: List[Dict], results_dir: Path):
@@ -360,8 +360,8 @@ def print_summary(all_results: List[Dict]):
     successful = [r for r in all_results if r['status'] == 'success']
     failed = [r for r in all_results if r['status'] == 'failed']
     
-    print(f"✅ Успешно: {len(successful)}/{len(all_results)}")
-    print(f"❌ Ошибок: {len(failed)}/{len(all_results)}\n")
+    print(f" Успешно: {len(successful)}/{len(all_results)}")
+    print(f" Ошибок: {len(failed)}/{len(all_results)}\n")
     
     if failed:
         print("ОШИБКИ:")
@@ -500,12 +500,12 @@ def main():
             # Выводим результат
             if result['status'] == 'success':
                 metrics = result.get('test_metrics', {})
-                print(f"\n✅ Успешно завершено!")
+                print(f"\n Успешно завершено!")
                 print(f"   Recall@10: {metrics.get('recall@10', 0):.4f}")
                 print(f"   NDCG@10: {metrics.get('ndcg@10', 0):.4f}")
                 print(f"   Время: {result.get('training_time', 0):.2f} сек")
             else:
-                print(f"\n❌ Ошибка: {result.get('error', 'Unknown')}")
+                print(f"\n Ошибка: {result.get('error', 'Unknown')}")
     
     total_time = time.time() - start_time
     
