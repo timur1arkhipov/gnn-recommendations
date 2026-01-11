@@ -27,7 +27,7 @@ class Evaluator:
     
     def __init__(
         self,
-        k_values: List[int] = [10, 20, 50],
+        k_values: List[int] = [10, 20],
         device: Optional[torch.device] = None
     ):
         """

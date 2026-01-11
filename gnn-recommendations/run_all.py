@@ -115,64 +115,8 @@ def main():
         print("Проверьте логи выше для деталей.")
         return 1
     
-    # Шаг 3: Depth Analysis (только для полного цикла)
-    if not args.quick:
-        success = run_command(
-            "Depth Analysis для GroupShuffleGNN",
-            [
-                sys.executable, "scripts/run_depth_analysis.py",
-                "--model", "groupshuffle_gnn",
-                "--dataset", "movie_lens",
-                "--layers", "2", "4", "8", "16"
-            ]
-        )
-        
-        if not success:
-            print("\n⚠️  Ошибка в Depth Analysis, но продолжаем...")
-    
-    # Шаг 4: Ablation Studies (только для полного цикла)
-    if not args.quick:
-        success = run_command(
-            "Ablation Studies для GroupShuffleGNN",
-            [
-                sys.executable, "scripts/run_ablations.py",
-                "--dataset", "movie_lens"
-            ]
-        )
-        
-        if not success:
-            print("\n⚠️  Ошибка в Ablation Studies, но продолжаем...")
-    
-    # Шаг 5: Анализ и визуализация
-    success = run_command(
-        "Создание графиков и таблиц",
-        [
-            sys.executable, "scripts/analyze_and_plot.py",
-            "--results_dir", "results/multiple_seeds",
-            "--output_dir", "results/figures",
-            "--baseline_model", baseline,
-            "--metrics", "recall@10", "ndcg@10", "precision@10", "coverage"
-        ]
-    )
-    
-    if not success:
-        print("\n⚠️  Ошибка при создании графиков, но результаты сохранены")
-    
-    # Шаг 6: Case Study (только для полного цикла)
-    if not args.quick:
-        success = run_command(
-            "Генерация Case Study",
-            [
-                sys.executable, "scripts/generate_case_study.py",
-                "--dataset", "movie_lens",
-                "--models", "bpr_mf", "lightgcn", "layergcn", "groupshuffle_gnn",
-                "--n_users", "10",
-                "--k", "10"
-            ]
-        )
-        
-        if not success:
-            print("\n⚠️  Ошибка в Case Study, но основные результаты готовы")
+    # Эксперименты завершены
+    print("\n✅ Основные эксперименты завершены успешно!")
     
     # Итоги
     elapsed_time = time.time() - start_time
@@ -185,14 +129,9 @@ def main():
     print(f"Общее время: {hours}ч {minutes}мин")
     print("\nРезультаты сохранены в:")
     print("  📁 results/multiple_seeds/     - основные результаты (JSON)")
-    print("  📊 results/figures/            - графики и LaTeX таблицы")
+    print("  📊 results/checkpoints/        - обученные модели")
     
-    if not args.quick:
-        print("  📈 experiments/depth_analysis/ - анализ глубины")
-        print("  🔬 experiments/ablations/      - ablation studies")
-        print("  📝 results/case_study/         - примеры рекомендаций")
-    
-    print("\n📖 Откройте EXPERIMENTS_GUIDE.md для подробной информации")
+    print("\n📖 Используйте результаты из results/multiple_seeds/ для анализа")
     print("="*80 + "\n")
     
     return 0

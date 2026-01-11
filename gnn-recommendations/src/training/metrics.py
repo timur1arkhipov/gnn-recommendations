@@ -185,10 +185,51 @@ def coverage(
     return coverage_score
 
 
+def gini_index(
+    scores: torch.Tensor,
+    k: int = 10
+) -> float:
+    """
+    Вычисляет Gini index - меру неравномерности распределения рекомендаций.
+    
+    Gini index показывает, насколько неравномерно items рекомендуются пользователям.
+    - Gini = 0: все items рекомендуются одинаково часто (идеальное равенство)
+    - Gini = 1: один item рекомендуется всем (максимальное неравенство)
+    
+    Args:
+        scores: матрица scores [n_users, n_items]
+        k: количество топ рекомендаций
+    
+    Returns:
+        Gini index (0.0 - 1.0)
+    """
+    n_items = scores.shape[1]
+    
+    # Топ-K айтемов для каждого пользователя
+    _, top_k_items = torch.topk(scores, k, dim=1)  # [n_users, k]
+    
+    # Подсчитываем частоту рекомендаций для каждого item
+    item_counts = np.zeros(n_items)
+    for item_id in top_k_items.cpu().numpy().flatten():
+        item_counts[item_id] += 1
+    
+    # Сортируем частоты
+    item_counts = np.sort(item_counts)
+    
+    # Вычисляем Gini index
+    n = len(item_counts)
+    cumsum = np.cumsum(item_counts)
+    
+    # Gini = (2 * sum(i * x_i)) / (n * sum(x_i)) - (n + 1) / n
+    gini = (2 * np.sum((np.arange(n) + 1) * item_counts)) / (n * cumsum[-1]) - (n + 1) / n
+    
+    return float(gini)
+
+
 def compute_all_metrics(
     scores: torch.Tensor,
     ground_truth: Dict[int, List[int]],
-    k_values: List[int] = [10, 20, 50]
+    k_values: List[int] = [10, 20]
 ) -> Dict[str, float]:
     """
     Вычисляет все метрики для заданных значений K.
@@ -196,7 +237,7 @@ def compute_all_metrics(
     Args:
         scores: матрица scores [n_users, n_items]
         ground_truth: словарь {user_id: [item_id1, item_id2, ...]}
-        k_values: список значений K для метрик
+        k_values: список значений K для метрик (по умолчанию [10, 20])
     
     Returns:
         Словарь с метриками: {'recall@10': ..., 'ndcg@10': ..., ...}
@@ -207,9 +248,8 @@ def compute_all_metrics(
         metrics[f'recall@{k}'] = recall_at_k(scores, ground_truth, k)
         metrics[f'ndcg@{k}'] = ndcg_at_k(scores, ground_truth, k)
         metrics[f'precision@{k}'] = precision_at_k(scores, ground_truth, k)
-    
-    # Coverage (вычисляется один раз для k=10)
-    metrics['coverage'] = coverage(scores, k=10)
+        metrics[f'coverage@{k}'] = coverage(scores, k)
+        metrics[f'gini@{k}'] = gini_index(scores, k)
     
     return metrics
 
