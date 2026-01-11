@@ -1,5 +1,5 @@
 """
-Главный запускатор всех экспериментов для магистерской диссертации.
+Главный запускатор всех экспериментов
 
 Просто запустите:
     python run_all.py
@@ -22,7 +22,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 def run_command(description, command, cwd=None):
     """Запускает команду и выводит результат."""
     print("\n" + "="*80)
-    print(f"▶ {description}")
+    print(f" {description}")
     print("="*80)
     print(f"Команда: {' '.join(command)}\n")
     
@@ -47,7 +47,7 @@ def run_command(description, command, cwd=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Запуск всех экспериментов для магистерской диссертации"
+        description="Запуск всех экспериментов"
     )
     parser.add_argument(
         "--quick",
@@ -63,7 +63,7 @@ def main():
     args = parser.parse_args()
     
     print("\n" + "="*80)
-    print(" ЗАПУСК ЭКСПЕРИМЕНТОВ ДЛЯ МАГИСТЕРСКОЙ ДИССЕРТАЦИИ")
+    print(" ЗАПУСК ЭКСПЕРИМЕНТОВ")
     print("="*80)
     
     if args.quick:
@@ -84,7 +84,7 @@ def main():
             [sys.executable, "scripts/check_gpu.py"]
         )
         if not success:
-            print("\n⚠️  Проблемы с GPU, но продолжаем...")
+            print("\n  Проблемы с GPU, но продолжаем...")
     
     # Конфигурация для быстрого теста или полного цикла
     if args.quick:
@@ -128,10 +128,10 @@ def main():
     print("="*80)
     print(f"Общее время: {hours}ч {minutes}мин")
     print("\nРезультаты сохранены в:")
-    print("  📁 results/multiple_seeds/     - основные результаты (JSON)")
-    print("  📊 results/checkpoints/        - обученные модели")
+    print("   results/multiple_seeds/     - основные результаты (JSON)")
+    print("   results/checkpoints/        - обученные модели")
     
-    print("\n📖 Используйте результаты из results/multiple_seeds/ для анализа")
+    print("\n Используйте результаты из results/multiple_seeds/ для анализа")
     print("="*80 + "\n")
     
     return 0
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         exit_code = main()
         sys.exit(exit_code)
     except KeyboardInterrupt:
-        print("\n\n⚠️  Прервано пользователем")
+        print("\n\n  Прервано пользователем")
         sys.exit(1)
     except Exception as e:
         print(f"\n\n КРИТИЧЕСКАЯ ОШИБКА: {str(e)}")
