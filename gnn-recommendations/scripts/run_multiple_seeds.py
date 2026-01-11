@@ -37,13 +37,13 @@ ALL_MODELS = [
     'dgr',
     'svd_gcn',
     'layergcn',
-    'groupshuffle_gnn'
+    'orthogonal_bundle'
 ]
 
 ALL_DATASETS = [
     'movie_lens',
     'book_crossing',
-    # 'gowalla',  # Слишком большой для RTX 4060
+    'gowalla',
 ]
 
 

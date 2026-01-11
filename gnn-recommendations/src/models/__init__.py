@@ -1,7 +1,7 @@
 """Модели рекомендательных систем."""
 
 from .base import BaseRecommender
-from .group_shuffle import GroupShuffleGNN, GroupShuffleLayer
+from .orthogonal_bundle import OrthogonalBundleGNN, GroupShuffleLayer
 from .baselines import (
     BPR_MF,
     LightGCN,
@@ -13,7 +13,7 @@ from .baselines import (
 
 __all__ = [
     'BaseRecommender',
-    'GroupShuffleGNN',
+    'OrthogonalBundleGNN',
     'GroupShuffleLayer',
     'BPR_MF',
     'LightGCN',

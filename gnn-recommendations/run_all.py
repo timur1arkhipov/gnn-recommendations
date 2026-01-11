@@ -88,12 +88,12 @@ def main():
     
     # Конфигурация для быстрого теста или полного цикла
     if args.quick:
-        models = ["bpr_mf", "lightgcn", "groupshuffle_gnn"]
+        models = ["bpr_mf", "lightgcn", "orthogonal_bundle"]
         datasets = ["movie_lens"]
         seeds = ["42", "43"]
         baseline = "lightgcn"
     else:
-        models = ["bpr_mf", "lightgcn", "gcnii", "dgr", "layergcn", "groupshuffle_gnn"]
+        models = ["bpr_mf", "lightgcn", "gcnii", "dgr", "layergcn", "orthogonal_bundle"]
         datasets = ["movie_lens", "book_crossing"]
         seeds = ["42", "43", "44", "45", "46"]
         baseline = "layergcn"

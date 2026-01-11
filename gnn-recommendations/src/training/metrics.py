@@ -226,10 +226,100 @@ def gini_index(
     return float(gini)
 
 
+def mean_cosine_similarity(embeddings: torch.Tensor) -> float:
+    """
+    Вычисляет Mean Cosine Similarity (MCS) между embeddings.
+    
+    MCS показывает среднюю похожесть между всеми парами embeddings.
+    Используется для анализа over-smoothing:
+    - MCS близко к 1: сильный over-smoothing (все embeddings похожи)
+    - MCS близко к 0: хорошая дифференциация
+    
+    Args:
+        embeddings: тензор embeddings [n_nodes, embedding_dim]
+    
+    Returns:
+        Средняя косинусная похожесть (0.0 - 1.0)
+    """
+    # Нормализуем embeddings
+    embeddings_norm = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+    
+    # Косинусная похожесть между всеми парами
+    similarity_matrix = embeddings_norm @ embeddings_norm.T  # [n_nodes, n_nodes]
+    
+    # Убираем диагональ (похожесть с самим собой)
+    n_nodes = embeddings.shape[0]
+    mask = ~torch.eye(n_nodes, dtype=torch.bool, device=embeddings.device)
+    similarities = similarity_matrix[mask]
+    
+    # Средняя похожесть
+    mcs = similarities.mean().item()
+    
+    return float(mcs)
+
+
+def mean_average_distance(embeddings: torch.Tensor) -> float:
+    """
+    Вычисляет Mean Average Distance (MAD) между embeddings.
+    
+    MAD показывает среднее расстояние между всеми парами embeddings.
+    Используется для анализа разделимости:
+    - MAD большое: embeddings хорошо разделены
+    - MAD маленькое: embeddings слишком близко (возможно over-smoothing)
+    
+    Args:
+        embeddings: тензор embeddings [n_nodes, embedding_dim]
+    
+    Returns:
+        Среднее расстояние
+    """
+    n_nodes = embeddings.shape[0]
+    
+    # Евклидово расстояние между всеми парами
+    # ||x_i - x_j||^2 = ||x_i||^2 + ||x_j||^2 - 2*x_i^T*x_j
+    norms_sq = (embeddings ** 2).sum(dim=1, keepdim=True)  # [n_nodes, 1]
+    distances_sq = norms_sq + norms_sq.T - 2 * (embeddings @ embeddings.T)
+    distances_sq = torch.clamp(distances_sq, min=0)  # Избегаем отрицательных из-за точности
+    distances = torch.sqrt(distances_sq)
+    
+    # Убираем диагональ
+    mask = ~torch.eye(n_nodes, dtype=torch.bool, device=embeddings.device)
+    distances_flat = distances[mask]
+    
+    # Среднее расстояние
+    mad = distances_flat.mean().item()
+    
+    return float(mad)
+
+
+def embedding_variance(embeddings: torch.Tensor) -> float:
+    """
+    Вычисляет Variance (дисперсию) embeddings.
+    
+    Variance показывает разброс значений в embeddings:
+    - Variance большая: embeddings разнообразны
+    - Variance маленькая: embeddings коллапсировали (over-smoothing)
+    
+    Args:
+        embeddings: тензор embeddings [n_nodes, embedding_dim]
+    
+    Returns:
+        Средняя дисперсия по всем измерениям
+    """
+    # Дисперсия по каждому измерению
+    variance_per_dim = embeddings.var(dim=0)  # [embedding_dim]
+    
+    # Средняя дисперсия
+    avg_variance = variance_per_dim.mean().item()
+    
+    return float(avg_variance)
+
+
 def compute_all_metrics(
     scores: torch.Tensor,
     ground_truth: Dict[int, List[int]],
-    k_values: List[int] = [10, 20]
+    k_values: List[int] = [10, 20],
+    embeddings: Optional[torch.Tensor] = None
 ) -> Dict[str, float]:
     """
     Вычисляет все метрики для заданных значений K.
@@ -238,18 +328,26 @@ def compute_all_metrics(
         scores: матрица scores [n_users, n_items]
         ground_truth: словарь {user_id: [item_id1, item_id2, ...]}
         k_values: список значений K для метрик (по умолчанию [10, 20])
+        embeddings: опциональные embeddings для анализа [n_nodes, embedding_dim]
     
     Returns:
         Словарь с метриками: {'recall@10': ..., 'ndcg@10': ..., ...}
     """
     metrics = {}
     
+    # Метрики для рекомендаций
     for k in k_values:
         metrics[f'recall@{k}'] = recall_at_k(scores, ground_truth, k)
         metrics[f'ndcg@{k}'] = ndcg_at_k(scores, ground_truth, k)
         metrics[f'precision@{k}'] = precision_at_k(scores, ground_truth, k)
         metrics[f'coverage@{k}'] = coverage(scores, k)
         metrics[f'gini@{k}'] = gini_index(scores, k)
+    
+    # Метрики для embeddings (анализ over-smoothing)
+    if embeddings is not None:
+        metrics['mcs'] = mean_cosine_similarity(embeddings)
+        metrics['mad'] = mean_average_distance(embeddings)
+        metrics['variance'] = embedding_variance(embeddings)
     
     return metrics
 

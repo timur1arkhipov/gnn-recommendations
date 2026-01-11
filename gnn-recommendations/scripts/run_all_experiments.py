@@ -27,7 +27,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from src.models import (
-    BPR_MF, LightGCN, GCNII, DGR, SVD_GCN, LayerGCN, GroupShuffleGNN
+    BPR_MF, LightGCN, GCNII, DGR, SVD_GCN, LayerGCN, OrthogonalBundleGNN
 )
 from src.data import RecommendationDataset
 from src.training import Trainer
@@ -42,15 +42,14 @@ MODEL_REGISTRY = {
     'dgr': DGR,
     'svd_gcn': SVD_GCN,
     'layergcn': LayerGCN,
-    'groupshuffle_gnn': GroupShuffleGNN,
-    'groupshuffle': GroupShuffleGNN,  # Алиас для groupshuffle_gnn
+    'orthogonal_bundle': OrthogonalBundleGNN,
 }
 
 # Все датасеты
 ALL_DATASETS = ['movie_lens', 'book_crossing', 'gowalla']
 
 # Все модели (без дубликатов алиасов)
-ALL_MODELS = ['bpr_mf', 'lightgcn', 'gcnii', 'dgr', 'svd_gcn', 'layergcn', 'groupshuffle_gnn']
+ALL_MODELS = ['bpr_mf', 'lightgcn', 'gcnii', 'dgr', 'svd_gcn', 'layergcn', 'orthogonal_bundle']
 
 
 def load_config(model_name: str, root_dir: Path) -> dict:

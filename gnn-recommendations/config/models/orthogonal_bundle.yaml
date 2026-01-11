@@ -1,0 +1,49 @@
+# Configuration for OrthogonalBundleGNN model
+
+model_name: "orthogonal_bundle"
+
+# Model parameters
+model:
+  embedding_dim: 64        # Embedding dimension (must be divisible by block_size)
+  n_layers: 3              # Number of layers
+  block_size: 8            # Block size for orthogonal matrices
+  residual_alpha: 0.1      # Coefficient for residual connections (0.0-1.0)
+  dropout: 0.0             # Dropout (0.0 = no dropout)
+  init_scale: 0.01         # Initialization scale for parameters
+  use_parallel_transport: true  # Whether to use parallel transport (bundle structure)
+
+# Training parameters
+training:
+  learning_rate: 0.001     # Learning rate
+  weight_decay: 1e-4       # Weight decay for regularization
+  batch_size: 2048
+  epochs: 300
+  early_stopping:
+    patience: 20           # Early stopping patience
+    min_delta: 0.0001      # Minimum change to qualify as improvement
+  
+  # BPR Loss parameters
+  negative_samples: 1      # Number of negative samples per positive
+  
+  # Learning rate scheduling
+  use_scheduler: true
+  warmup_epochs: 5
+  max_grad_norm: 1.0
+
+# Dataset-specific parameters (can override)
+dataset_specific:
+  movie_lens:
+    embedding_dim: 64
+    n_layers: 3
+    block_size: 8
+  
+  book_crossing:
+    embedding_dim: 64
+    n_layers: 3
+    block_size: 8
+  
+  gowalla:
+    embedding_dim: 64
+    n_layers: 3
+    block_size: 8
+

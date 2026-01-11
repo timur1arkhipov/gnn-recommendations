@@ -74,6 +74,9 @@ class Evaluator:
             # Получаем все embeddings
             user_emb, item_emb = model.get_all_embeddings(adj_matrix)
             
+            # Объединяем embeddings для анализа over-smoothing
+            all_embeddings = torch.cat([user_emb, item_emb], dim=0)
+            
             # Вычисляем scores для всех пар
             scores = user_emb @ item_emb.T  # [n_users, n_items]
             
@@ -85,11 +88,12 @@ class Evaluator:
             # Подготавливаем ground truth из test_data
             ground_truth = self._prepare_ground_truth(test_data)
             
-            # Вычисляем метрики
+            # Вычисляем метрики (включая embedding метрики)
             metrics = compute_all_metrics(
                 scores.cpu(),
                 ground_truth,
-                k_values=self.k_values
+                k_values=self.k_values,
+                embeddings=all_embeddings.cpu()
             )
             
             return metrics
