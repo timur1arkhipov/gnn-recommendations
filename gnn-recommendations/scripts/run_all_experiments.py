@@ -198,6 +198,8 @@ def train_and_evaluate(
         config['checkpoint_dir'] = str(
             root_dir / "results" / "checkpoints" / model_name / normalized_dataset_name
         )
+        config['model_name'] = model_name
+        config['dataset_name'] = normalized_dataset_name
         
         # 4. Создаем Trainer
         trainer = Trainer(model, dataset, config)

@@ -42,3 +42,15 @@ validation_metrics:
 
 # Метрика для early stopping
 early_stopping_metric: "recall@10"
+
+# Warm-start embeddings (опционально)
+warm_start:
+  enabled: true
+  apply_to: "orthogonal_bundle"
+  embeddings_path: "results/embeddings/lightgcn_movie_lens.pt"
+
+# Экспорт embeddings после обучения (опционально)
+export_embeddings:
+  enabled: true
+  apply_to: "lightgcn"
+  path: "results/embeddings/lightgcn_movie_lens.pt"

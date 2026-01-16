@@ -2,8 +2,22 @@
    - user/item embeddings — обучаемые параметры модели.
    - Инициализация по умолчанию: случайная N(0, 0.01).
    - Основное обучение: end-to-end через BPR Loss (user/item embeddings + матрицы переноса + локальные трансформации оптимизируются совместно).
-   - Опционально: warm-start от LightGCN/SVD (как отдельный режим), с последующим дообучением всей модели.
+   - warm-start от LightGCN (как отдельный режим):
+     1) обучить LightGCN на том же датасете,
+     2) экспортировать user/item embeddings,
+     3) загрузить embeddings в OrthogonalBundle и дообучить всю модель.
    - Для пользователей отсутствие признаков не проблема: их embeddings обучаются через взаимодействия (как в стандартных CF-моделях).
+   команды:
+   - python c:\Users\timur\OneDrive\Документы\diploma\gnn-recommendations\scripts\run_all_experiments.py --models lightgcn --datasets movie_lens --seed 42
+
+   - python c:\Users\timur\OneDrive\Документы\diploma\gnn-recommendations\scripts\run_all_experiments.py --models orthogonal_bundle --datasets movie_lens --seed 42
+
+1.2) объясни работу в LightGCN
+   - Инициализация: обучаемые эмбеддинги пользователей и айтемов.
+   - Графовая свёртка L раз: x <- A_norm * x (без нелинейностей и весов).
+   - Layer aggregation: усреднение embeddings со всех слоёв (включая слой 0).
+   - Скоринг: скалярное произведение user_emb и item_emb.
+   - Обучение: BPR Loss, всё end‑to‑end.
 
 2) (orthogonal_bundle) Архитектура формализована (вариант A, shared connection):
    - Соединительная матрица W^(l) зависит только от слоя l и является общей для всех рёбер.

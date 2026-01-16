@@ -56,6 +56,8 @@ class Trainer:
         self.model = model
         self.dataset = dataset
         self.config = config
+        self.model_name = config.get('model_name')
+        self.dataset_name = config.get('dataset_name')
         
         # Устройство
         if device is None:
@@ -64,6 +66,7 @@ class Trainer:
             self.device = device
         
         self.model.to(self.device)
+        self._maybe_warm_start_embeddings()
         
         # Оптимизатор (преобразуем параметры в правильные типы)
         learning_rate = float(config.get('learning_rate', 0.001))
@@ -354,6 +357,92 @@ class Trainer:
                     continue
         return sorted(k_values)
 
+    def _maybe_warm_start_embeddings(self):
+        """
+        Load pretrained embeddings into the current model if configured.
+        """
+        warm_start = self.config.get('warm_start', {})
+        if not warm_start or not warm_start.get('enabled', False):
+            return
+        apply_to = warm_start.get('apply_to')
+        if apply_to and self.model_name and apply_to != self.model_name:
+            return
+        embeddings_path = warm_start.get('embeddings_path')
+        if not embeddings_path:
+            raise ValueError("warm_start.enabled=true, but embeddings_path is not set")
+
+        checkpoint = torch.load(embeddings_path, map_location=self.device)
+        user_emb = None
+        item_emb = None
+
+        if isinstance(checkpoint, dict):
+            if 'user_embedding' in checkpoint and 'item_embedding' in checkpoint:
+                user_emb = checkpoint['user_embedding']
+                item_emb = checkpoint['item_embedding']
+            elif 'model_state_dict' in checkpoint:
+                state_dict = checkpoint['model_state_dict']
+                if 'user_embedding.weight' in state_dict and 'item_embedding.weight' in state_dict:
+                    user_emb = state_dict['user_embedding.weight']
+                    item_emb = state_dict['item_embedding.weight']
+
+        if user_emb is None or item_emb is None:
+            raise ValueError(
+                "Warm-start embeddings not found in file. "
+                "Expected keys: user_embedding/item_embedding or model_state_dict."
+            )
+
+        if not hasattr(self.model, 'user_embedding') or not hasattr(self.model, 'item_embedding'):
+            raise ValueError("Model does not expose user_embedding/item_embedding for warm-start.")
+
+        if user_emb.shape != self.model.user_embedding.weight.shape:
+            raise ValueError(
+                f"user_embedding shape mismatch: got {tuple(user_emb.shape)}, "
+                f"expected {tuple(self.model.user_embedding.weight.shape)}"
+            )
+        if item_emb.shape != self.model.item_embedding.weight.shape:
+            raise ValueError(
+                f"item_embedding shape mismatch: got {tuple(item_emb.shape)}, "
+                f"expected {tuple(self.model.item_embedding.weight.shape)}"
+            )
+
+        with torch.no_grad():
+            self.model.user_embedding.weight.copy_(user_emb.to(self.device))
+            self.model.item_embedding.weight.copy_(item_emb.to(self.device))
+
+    def _maybe_export_embeddings(self):
+        """
+        Export embeddings after training if configured.
+        """
+        export_cfg = self.config.get('export_embeddings', {})
+        if not export_cfg or not export_cfg.get('enabled', False):
+            return
+        apply_to = export_cfg.get('apply_to')
+        if apply_to and self.model_name and apply_to != self.model_name:
+            return
+        export_path = export_cfg.get('path')
+        if not export_path:
+            raise ValueError("export_embeddings.enabled=true, but path is not set")
+
+        adj_matrix = self.dataset.get_torch_adjacency(normalized=True).to(self.device)
+        try:
+            user_emb, item_emb = self.model.get_all_embeddings(adj_matrix)
+        except TypeError:
+            user_emb, item_emb = self.model.get_all_embeddings()
+
+        export_payload = {
+            'user_embedding': user_emb.detach().cpu(),
+            'item_embedding': item_emb.detach().cpu(),
+            'source_model': self.model_name,
+            'dataset': self.dataset_name,
+            'embedding_dim': int(user_emb.size(1)),
+            'n_users': int(user_emb.size(0)),
+            'n_items': int(item_emb.size(0)),
+        }
+
+        export_path = Path(export_path)
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(export_payload, export_path)
+
     def _get_orthogonality_metrics(self) -> Dict[str, float]:
         """
         Get runtime orthogonality metrics if model supports them.
@@ -472,6 +561,7 @@ class Trainer:
                     break
         
         training_time = time.time() - start_time
+        self._maybe_export_embeddings()
         
         print(f"\n{'='*60}")
         print(f"ОБУЧЕНИЕ ЗАВЕРШЕНО")
