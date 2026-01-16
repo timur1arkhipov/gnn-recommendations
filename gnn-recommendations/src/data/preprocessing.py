@@ -18,7 +18,9 @@ def filter_by_min_interactions(
     user_col: str = 'userId',
     item_col: str = 'itemId',
     min_user_interactions: int = 10,
-    min_item_interactions: int = 10
+    min_item_interactions: int = 10,
+    iterative: bool = True,
+    max_iters: int = 50
 ) -> pd.DataFrame:
     """
     Фильтрует данные, оставляя только пользователей и айтемы с минимальным количеством взаимодействий.
@@ -32,6 +34,8 @@ def filter_by_min_interactions(
         item_col: название колонки с ID айтемов
         min_user_interactions: минимальное количество взаимодействий для пользователя
         min_item_interactions: минимальное количество взаимодействий для айтема
+        iterative: использовать ли итеративную k-core фильтрацию
+        max_iters: максимальное число итераций при iterative=True
     
     Returns:
         Отфильтрованный DataFrame
@@ -39,24 +43,37 @@ def filter_by_min_interactions(
     print(f"Начальная статистика: {len(df)} взаимодействий, "
           f"{df[user_col].nunique()} пользователей, {df[item_col].nunique()} айтемов")
     
-    # Подсчитываем количество взаимодействий для каждого пользователя
-    user_counts = df[user_col].value_counts()
-    # Оставляем только пользователей с достаточным количеством взаимодействий
-    valid_users = user_counts[user_counts >= min_user_interactions].index
-    df_filtered = df[df[user_col].isin(valid_users)].copy()
-    
-    print(f"После фильтрации пользователей: {len(df_filtered)} взаимодействий, "
-          f"{df_filtered[user_col].nunique()} пользователей")
-    
-    # Подсчитываем количество взаимодействий для каждого айтема
-    item_counts = df_filtered[item_col].value_counts()
-    # Оставляем только айтемы с достаточным количеством взаимодействий
-    valid_items = item_counts[item_counts >= min_item_interactions].index
-    df_filtered = df_filtered[df_filtered[item_col].isin(valid_items)].copy()
-    
-    print(f"После фильтрации айтемов: {len(df_filtered)} взаимодействий, "
-          f"{df_filtered[user_col].nunique()} пользователей, {df_filtered[item_col].nunique()} айтемов")
-    
+    df_filtered = df.copy()
+    iters = 0
+    while True:
+        iters += 1
+        # Подсчитываем количество взаимодействий для каждого пользователя
+        user_counts = df_filtered[user_col].value_counts()
+        # Оставляем только пользователей с достаточным количеством взаимодействий
+        valid_users = user_counts[user_counts >= min_user_interactions].index
+        df_filtered = df_filtered[df_filtered[user_col].isin(valid_users)].copy()
+
+        # Подсчитываем количество взаимодействий для каждого айтема
+        item_counts = df_filtered[item_col].value_counts()
+        # Оставляем только айтемы с достаточным количеством взаимодействий
+        valid_items = item_counts[item_counts >= min_item_interactions].index
+        df_filtered = df_filtered[df_filtered[item_col].isin(valid_items)].copy()
+
+        print(f"Итерация {iters}: {len(df_filtered)} взаимодействий, "
+              f"{df_filtered[user_col].nunique()} пользователей, {df_filtered[item_col].nunique()} айтемов")
+
+        if not iterative:
+            break
+        if iters >= max_iters:
+            print("Предупреждение: достигнут лимит итераций фильтрации.")
+            break
+
+        # Проверяем сходимость: если ни пользователи, ни айтемы не меняются
+        new_user_count = df_filtered[user_col].nunique()
+        new_item_count = df_filtered[item_col].nunique()
+        if new_user_count == len(valid_users) and new_item_count == len(valid_items):
+            break
+
     return df_filtered
 
 
@@ -169,7 +186,8 @@ def remove_duplicates(
     df: pd.DataFrame,
     user_col: str = 'userId',
     item_col: str = 'itemId',
-    keep: str = 'first'
+    timestamp_col: Optional[str] = None,
+    keep: str = 'last'
 ) -> pd.DataFrame:
     """
     Удаляет дубликаты взаимодействий (один пользователь - один айтем).
@@ -178,12 +196,19 @@ def remove_duplicates(
         df: DataFrame с взаимодействиями
         user_col: название колонки с ID пользователей
         item_col: название колонки с ID айтемов
+        timestamp_col: название колонки с временной меткой (если есть)
         keep: какой дубликат оставить ('first', 'last', или False для удаления всех)
     
     Returns:
         DataFrame без дубликатов
     """
     initial_count = len(df)
+    df = df.copy()
+
+    # Если есть timestamp, считаем последнюю запись наиболее корректной
+    if timestamp_col and timestamp_col in df.columns:
+        df = df.sort_values(timestamp_col)
+
     df = df.drop_duplicates(subset=[user_col, item_col], keep=keep)
     removed = initial_count - len(df)
     

@@ -1,0 +1,1 @@
+python /Users/timur/gnn-recommendations/gnn-recommendations/scripts/run_multiple_seeds.py --models lightgcn --datasets movie_lens --seeds 42

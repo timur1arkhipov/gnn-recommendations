@@ -169,7 +169,7 @@ class RecommendationDataset:
         self,
         min_user_interactions: Optional[int] = None,
         min_item_interactions: Optional[int] = None,
-        rating_threshold: float = 0.0
+        rating_threshold: Optional[float] = None
     ) -> pd.DataFrame:
         """
         Препроцессинг данных: фильтрация, бинаризация, нормализация ID.
@@ -177,7 +177,7 @@ class RecommendationDataset:
         Args:
             min_user_interactions: минимальное количество взаимодействий для пользователя
             min_item_interactions: минимальное количество взаимодействий для айтема
-            rating_threshold: порог рейтинга для бинаризации
+        rating_threshold: порог рейтинга для бинаризации (если None, используется дефолт)
         
         Returns:
             Обработанный DataFrame
@@ -207,19 +207,38 @@ class RecommendationDataset:
         
         # 1. Удаляем дубликаты
         print("\n1. Удаление дубликатов...")
-        df = remove_duplicates(df)
-        
-        # 2. Фильтрация по минимальному количеству взаимодействий
-        print("\n2. Фильтрация...")
+        timestamp_col = 'timestamp' if 'timestamp' in df.columns else None
+        df = remove_duplicates(df, timestamp_col=timestamp_col, keep='last')
+
+        # 2. Бинаризация (implicit feedback)
+        print("\n2. Бинаризация взаимодействий...")
+        if rating_threshold is None:
+            if 'binarize' in self.config and 'rating_threshold' in self.config['binarize']:
+                rating_threshold = self.config['binarize']['rating_threshold']
+            else:
+                rating_threshold = 4.0 if self.name in ['movie_lens', 'movielens1m'] else 0.0
+        rating_col = 'rating' if 'rating' in df.columns else None
+        df = binarize_interactions(df, rating_col=rating_col, threshold=rating_threshold)
+
+        # Проверяем, что после бинаризации остались данные
+        if df.empty:
+            raise ValueError(
+                f"После бинаризации данных не осталось!\n"
+                f"Возможно, все рейтинги были ниже порога threshold={rating_threshold}."
+            )
+
+        # 3. Фильтрация по минимальному количеству взаимодействий (iterative k-core)
+        print("\n3. Фильтрация...")
         min_user = min_user_interactions or self.config['filtering']['min_user_interactions']
         min_item = min_item_interactions or self.config['filtering']['min_item_interactions']
-        
+
         df = filter_by_min_interactions(
             df,
             min_user_interactions=min_user,
-            min_item_interactions=min_item
+            min_item_interactions=min_item,
+            iterative=True
         )
-        
+
         # Проверяем, что после фильтрации остались данные
         if df.empty:
             raise ValueError(
@@ -227,19 +246,7 @@ class RecommendationDataset:
                 f"Попробуйте уменьшить min_user_interactions или min_item_interactions.\n"
                 f"Текущие значения: min_user={min_user}, min_item={min_item}"
             )
-        
-        # 3. Бинаризация (implicit feedback)
-        print("\n3. Бинаризация взаимодействий...")
-        rating_col = 'rating' if 'rating' in df.columns else None
-        df = binarize_interactions(df, rating_col=rating_col, threshold=rating_threshold)
-        
-        # Проверяем, что после бинаризации остались данные
-        if df.empty:
-            raise ValueError(
-                f"После бинаризации данных не осталось!\n"
-                f"Возможно, все рейтинги были ниже порога threshold={rating_threshold}."
-            )
-        
+
         # 4. Нормализация ID (приведение к последовательным числам от 0)
         print("\n4. Нормализация ID...")
         df, self.user_mapping, self.item_mapping = normalize_ids(df)
@@ -302,31 +309,85 @@ class RecommendationDataset:
             "Сумма долей должна быть равна 1.0"
         
         if strategy == 'temporal':
-            # Разделение по времени (если есть timestamp)
+            # Per-user temporal split: последние взаимодействия пользователя идут в valid/test
             if 'timestamp' in df.columns:
-                df = df.sort_values('timestamp')
-                n = len(df)
-                train_end = int(n * train_ratio)
-                valid_end = int(n * (train_ratio + valid_ratio))
-                
-                self.train_data = df.iloc[:train_end].copy()
-                self.valid_data = df.iloc[train_end:valid_end].copy()
-                self.test_data = df.iloc[valid_end:].copy()
+                df = df.sort_values(['userId', 'timestamp'])
+                train_rows = []
+                valid_rows = []
+                test_rows = []
+                for _, group in df.groupby('userId'):
+                    n = len(group)
+                    if n >= 3:
+                        test_rows.append(group.iloc[-1])
+                        valid_rows.append(group.iloc[-2])
+                        train_rows.append(group.iloc[:-2])
+                    elif n == 2:
+                        test_rows.append(group.iloc[-1])
+                        train_rows.append(group.iloc[:1])
+                    else:
+                        train_rows.append(group)
+
+                self.train_data = pd.concat(train_rows, ignore_index=True)
+                self.valid_data = pd.DataFrame(valid_rows) if valid_rows else pd.DataFrame(columns=df.columns)
+                self.test_data = pd.DataFrame(test_rows) if test_rows else pd.DataFrame(columns=df.columns)
             else:
-                # Если нет timestamp, используем случайное разделение
-                print("Внимание: timestamp не найден, используется случайное разделение")
+                print("Внимание: timestamp не найден, используется per-user random split")
                 strategy = 'random'
-        
+
         if strategy == 'random':
-            # Случайное разделение
-            df = df.sample(frac=1.0, random_state=42).reset_index(drop=True)
-            n = len(df)
-            train_end = int(n * train_ratio)
-            valid_end = int(n * (train_ratio + valid_ratio))
-            
-            self.train_data = df.iloc[:train_end].copy()
-            self.valid_data = df.iloc[train_end:valid_end].copy()
-            self.test_data = df.iloc[valid_end:].copy()
+            # Per-user random split с сохранением как минимум одного train события
+            train_rows = []
+            valid_rows = []
+            test_rows = []
+            rng = np.random.RandomState(42)
+            for _, group in df.groupby('userId'):
+                group = group.sample(frac=1.0, random_state=rng).reset_index(drop=True)
+                n = len(group)
+                if n == 1:
+                    train_rows.append(group)
+                    continue
+
+                # Гарантируем минимум одно взаимодействие в train
+                test_size = max(1, int(n * test_ratio))
+                valid_size = max(0, int(n * valid_ratio))
+                if test_size + valid_size >= n:
+                    test_size = 1
+                    valid_size = 0
+
+                test_part = group.iloc[:test_size]
+                valid_part = group.iloc[test_size:test_size + valid_size]
+                train_part = group.iloc[test_size + valid_size:]
+
+                train_rows.append(train_part)
+                if not valid_part.empty:
+                    valid_rows.append(valid_part)
+                if not test_part.empty:
+                    test_rows.append(test_part)
+
+            self.train_data = pd.concat(train_rows, ignore_index=True)
+            self.valid_data = pd.concat(valid_rows, ignore_index=True) if valid_rows else pd.DataFrame(columns=df.columns)
+            self.test_data = pd.concat(test_rows, ignore_index=True) if test_rows else pd.DataFrame(columns=df.columns)
+
+        # Удаляем cold-start взаимодействия в valid/test
+        train_users = set(self.train_data['userId'].unique())
+        train_items = set(self.train_data['itemId'].unique())
+        before_valid = len(self.valid_data)
+        before_test = len(self.test_data)
+
+        if not self.valid_data.empty:
+            self.valid_data = self.valid_data[
+                self.valid_data['userId'].isin(train_users) &
+                self.valid_data['itemId'].isin(train_items)
+            ].copy()
+        if not self.test_data.empty:
+            self.test_data = self.test_data[
+                self.test_data['userId'].isin(train_users) &
+                self.test_data['itemId'].isin(train_items)
+            ].copy()
+
+        if before_valid != len(self.valid_data) or before_test != len(self.test_data):
+            print(f"Удалены cold-start взаимодействия: valid {before_valid}->{len(self.valid_data)}, "
+                  f"test {before_test}->{len(self.test_data)}")
         
         print(f"Train: {len(self.train_data)} взаимодействий")
         print(f"Valid: {len(self.valid_data)} взаимодействий")
@@ -364,6 +425,23 @@ class RecommendationDataset:
                 'test_size': len(self.test_data),
                 **self.stats
             }, f, indent=2)
+
+        # Сохраняем маппинги ID
+        if self.user_mapping and self.item_mapping:
+            user_map_file = self.processed_data_path / "user_mapping.json"
+            item_map_file = self.processed_data_path / "item_mapping.json"
+
+            user_mapping_str = {str(k): int(v) for k, v in self.user_mapping.items()}
+            item_mapping_str = {str(k): int(v) for k, v in self.item_mapping.items()}
+            user_reverse = {str(v): str(k) for k, v in self.user_mapping.items()}
+            item_reverse = {str(v): str(k) for k, v in self.item_mapping.items()}
+
+            with open(user_map_file, 'w', encoding='utf-8') as f:
+                json.dump({'original_to_new': user_mapping_str,
+                           'new_to_original': user_reverse}, f, indent=2)
+            with open(item_map_file, 'w', encoding='utf-8') as f:
+                json.dump({'original_to_new': item_mapping_str,
+                           'new_to_original': item_reverse}, f, indent=2)
         
         print(f"\nДанные сохранены в: {self.processed_data_path}")
     

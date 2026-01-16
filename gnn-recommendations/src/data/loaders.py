@@ -73,7 +73,9 @@ class MovieLensLoader(BaseDatasetLoader):
         """
         Загружает данные MovieLens.
         
-        Формат: ratings.csv с колонками userId, movieId, rating, timestamp
+        Формат:
+        - ratings.csv с колонками userId, movieId, rating, timestamp
+        - ratings.dat (MovieLens-1M) с разделителем "::"
         """
         # Ищем файл ratings.csv
         ratings_file = data_path / "ratings.csv"
@@ -83,11 +85,27 @@ class MovieLensLoader(BaseDatasetLoader):
         if not ratings_file.exists():
             ratings_file = data_path.parent.parent / "data" / "raw" / "movie_lens" / "ratings.csv"
         
-        if not ratings_file.exists():
-            raise FileNotFoundError(f"Файл ratings.csv не найден в {data_path}")
-        
-        # Загружаем данные
-        df = pd.read_csv(ratings_file)
+        df = pd.DataFrame()
+        if ratings_file.exists():
+            # Загружаем данные
+            df = pd.read_csv(ratings_file)
+        else:
+            # Пробуем MovieLens-1M формат
+            ratings_dat = data_path / "ratings.dat"
+            if not ratings_dat.exists():
+                ratings_dat = data_path.parent / "movie_lens" / "ratings.dat"
+            if not ratings_dat.exists():
+                ratings_dat = data_path.parent.parent / "data" / "raw" / "movie_lens" / "ratings.dat"
+
+            if ratings_dat.exists():
+                df = pd.read_csv(
+                    ratings_dat,
+                    sep="::",
+                    engine="python",
+                    names=["userId", "movieId", "rating", "timestamp"]
+                )
+            else:
+                raise FileNotFoundError(f"Файл ratings.csv/ratings.dat не найден в {data_path}")
         
         # Нормализуем колонки: movieId -> itemId
         df = self._normalize_columns(df, {'itemId': 'movieId'})

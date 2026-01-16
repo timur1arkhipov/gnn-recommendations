@@ -45,31 +45,21 @@ def build_bipartite_graph(
         Sparse матрица смежности в формате COO (Coordinate format)
         Размерность: (n_users + n_items) x (n_users + n_items)
     """
-    # Создаем списки для построения sparse матрицы
-    # rows - индексы строк (источники)
-    # cols - индексы столбцов (назначения)
-    # data - значения (веса ребер, в нашем случае = 1)
-    
-    rows = []
-    cols = []
-    data = []
-    
-    # Добавляем ребра от пользователей к айтемам
-    # В bipartite графе пользователи имеют индексы 0..n_users-1
-    # Айтемы имеют индексы n_users..n_users+n_items-1
-    for _, row in interactions.iterrows():
-        user_id = row[user_col]
-        item_id = row[item_col]
-        
-        # Ребро от пользователя к айтему
-        rows.append(user_id)
-        cols.append(n_users + item_id)  # Смещаем индексы айтемов
-        data.append(1.0)
-        
-        # Ребро от айтема к пользователю (для неориентированного графа)
-        rows.append(n_users + item_id)
-        cols.append(user_id)
-        data.append(1.0)
+    # Векторизованная сборка ребер для ускорения
+    user_ids = interactions[user_col].to_numpy(dtype=np.int64, copy=False)
+    item_ids = interactions[item_col].to_numpy(dtype=np.int64, copy=False)
+
+    # Ребра от пользователей к айтемам
+    rows_ui = user_ids
+    cols_ui = n_users + item_ids
+
+    # Ребра от айтемов к пользователям (для неориентированного графа)
+    rows_iu = n_users + item_ids
+    cols_iu = user_ids
+
+    rows = np.concatenate([rows_ui, rows_iu])
+    cols = np.concatenate([cols_ui, cols_iu])
+    data = np.ones(len(rows), dtype=np.float32)
     
     # Создаем sparse матрицу в формате COO
     # COO (Coordinate) - самый простой формат для создания sparse матриц
