@@ -18,7 +18,7 @@ Architecture per layer:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 
 from ..base import BaseRecommender
 from .bundle_layer import BundleConnectionLayer
@@ -257,6 +257,49 @@ class OrthogonalBundleGNN(BaseRecommender):
             error = layer.get_orthogonality_error()
             errors.append(error)
         return torch.stack(errors)
+
+    def get_orthogonality_metrics(self) -> Dict[str, torch.Tensor]:
+        """
+        Get runtime orthogonality metrics for monitoring.
+
+        Returns:
+            Dict with aggregated orthogonality stats.
+        """
+        metrics: Dict[str, torch.Tensor] = {}
+
+        local_fro = []
+        local_max = []
+        for layer in self.local_transform_layers:
+            if hasattr(layer, 'get_orthogonality_metrics'):
+                fro_error, max_deviation = layer.get_orthogonality_metrics()
+                local_max.append(max_deviation)
+            else:
+                fro_error = layer.get_orthogonality_error()
+            local_fro.append(fro_error)
+
+        if local_fro:
+            local_fro_tensor = torch.stack(local_fro)
+            metrics['local_fro_mean'] = local_fro_tensor.mean()
+            metrics['local_fro_max'] = local_fro_tensor.max()
+        if local_max:
+            metrics['local_max_dev'] = torch.stack(local_max).max()
+
+        if self.use_parallel_transport:
+            conn_fro = []
+            conn_max = []
+            for layer in self.connection_layers:
+                if hasattr(layer, 'get_orthogonality_metrics'):
+                    fro_error, max_deviation = layer.get_orthogonality_metrics()
+                    conn_fro.append(fro_error)
+                    conn_max.append(max_deviation)
+            if conn_fro:
+                conn_fro_tensor = torch.stack(conn_fro)
+                metrics['conn_fro_mean'] = conn_fro_tensor.mean()
+                metrics['conn_fro_max'] = conn_fro_tensor.max()
+            if conn_max:
+                metrics['conn_max_dev'] = torch.stack(conn_max).max()
+
+        return metrics
     
     def get_layer_embeddings(
         self,

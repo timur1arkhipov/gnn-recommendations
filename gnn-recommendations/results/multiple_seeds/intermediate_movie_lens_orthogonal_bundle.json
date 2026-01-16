@@ -4,7 +4,7 @@
     "seed": 42,
     "model": "orthogonal_bundle",
     "dataset": "movie_lens",
-    "training_time": 59.38193154335022,
+    "training_time": 57.57121658325195,
     "best_epoch": 8,
     "metrics": {
       "recall@10": 0.1067889212628933,

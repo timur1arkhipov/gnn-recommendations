@@ -353,6 +353,29 @@ class Trainer:
                 except ValueError:
                     continue
         return sorted(k_values)
+
+    def _get_orthogonality_metrics(self) -> Dict[str, float]:
+        """
+        Get runtime orthogonality metrics if model supports them.
+        """
+        if not hasattr(self.model, 'get_orthogonality_metrics'):
+            return {}
+        with torch.no_grad():
+            metrics = self.model.get_orthogonality_metrics()
+        return {k: float(v.detach().cpu()) for k, v in metrics.items()}
+
+    @staticmethod
+    def _orthogonality_grade(value: float) -> str:
+        """
+        Map orthogonality error to a 4-level qualitative grade.
+        """
+        if value <= 1e-6:
+            return "точно ортогональные"
+        if value <= 1e-4:
+            return "почти ортогональные"
+        if value <= 1e-2:
+            return "слабая ортогональность"
+        return "совсем не ортогональные"
     
     def train(self) -> Dict:
         """
@@ -403,11 +426,36 @@ class Trainer:
                 
                 # Логирование
                 ndcg10 = valid_metrics.get('ndcg@10', 0.0)
+                orth_metrics = self._get_orthogonality_metrics()
+                local_fro = orth_metrics.get('local_fro_mean')
+                conn_fro = orth_metrics.get('conn_fro_mean')
+                local_max = orth_metrics.get('local_max_dev')
+                conn_max = orth_metrics.get('conn_max_dev')
                 print(f"Epoch {epoch:3d}/{self.epochs} | "
                       f"LR: {current_lr:.6f} | "
                       f"Train Loss: {train_loss:.4f} | "
                       f"{self.early_stopping_metric}: {current_metric:.4f} | "
                       f"NDCG@10: {ndcg10:.4f}")
+                if orth_metrics:
+                    orth_line = "Orthogonality (lower is better):"
+                    if local_fro is not None:
+                        orth_line += f" FroErr(local)={local_fro:.2e}"
+                    if conn_fro is not None:
+                        orth_line += f" | FroErr(conn)={conn_fro:.2e}"
+                    if local_max is not None:
+                        orth_line += f" | MaxDev(local)={local_max:.2e}"
+                    if conn_max is not None:
+                        orth_line += f" | MaxDev(conn)={conn_max:.2e}"
+                    grade_source = None
+                    if local_fro is not None and conn_fro is not None:
+                        grade_source = max(local_fro, conn_fro)
+                    elif local_fro is not None:
+                        grade_source = local_fro
+                    elif conn_fro is not None:
+                        grade_source = conn_fro
+                    if grade_source is not None:
+                        orth_line += f" | Grade: {self._orthogonality_grade(grade_source)}"
+                    print(orth_line)
                 
                 # Early stopping
                 if current_metric > self.best_metric + self.min_delta:

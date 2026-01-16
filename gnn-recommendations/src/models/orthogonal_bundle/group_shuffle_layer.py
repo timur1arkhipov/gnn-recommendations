@@ -6,7 +6,7 @@ This is the Group and Shuffle mechanism for orthogonal transformations.
 
 import torch
 import torch.nn as nn
-from typing import Optional
+from typing import Optional, Tuple
 
 
 class GroupShuffleLayer(nn.Module):
@@ -168,6 +168,20 @@ class GroupShuffleLayer(nn.Module):
         WtW = W_orth.T @ W_orth
         error = torch.norm(WtW - identity, p='fro')
         return error
+
+    def get_orthogonality_metrics(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Compute orthogonality metrics for monitoring.
+
+        Returns:
+            Tuple (frobenius_error, max_deviation)
+        """
+        W_orth = self._build_orthogonal_matrix()
+        identity = torch.eye(self.dim, device=W_orth.device, dtype=W_orth.dtype)
+        diff = W_orth.T @ W_orth - identity
+        fro_error = torch.norm(diff, p='fro')
+        max_deviation = diff.abs().max()
+        return fro_error, max_deviation
     
     def reset_parameters(self):
         """Reset parameters to initial values."""
