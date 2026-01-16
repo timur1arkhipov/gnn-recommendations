@@ -63,14 +63,6 @@ def load_config(model_name: str, root_dir: Path) -> dict:
     Returns:
         Словарь с конфигурацией
     """
-    # Загружаем конфигурацию модели
-    model_config_path = root_dir / "config" / "models" / f"{model_name}.yaml"
-    if model_config_path.exists():
-        with open(model_config_path, 'r', encoding='utf-8') as f:
-            model_config = yaml.safe_load(f)
-    else:
-        model_config = {'model': {}, 'training': {}}
-    
     # Загружаем общую конфигурацию обучения
     training_config_path = root_dir / "config" / "training.yaml"
     if training_config_path.exists():
@@ -80,11 +72,7 @@ def load_config(model_name: str, root_dir: Path) -> dict:
         training_config = {}
     
     # Объединяем конфигурации
-    config = training_config.copy()
-    if 'training' in model_config:
-        config.update(model_config['training'])
-    
-    return config
+    return training_config.copy()
 
 
 def create_model(

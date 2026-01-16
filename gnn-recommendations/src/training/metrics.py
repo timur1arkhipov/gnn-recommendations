@@ -351,3 +351,83 @@ def compute_all_metrics(
     
     return metrics
 
+
+def compute_metrics_from_topk(
+    topk_items: torch.Tensor,
+    user_ids: List[int],
+    ground_truth: Dict[int, List[int]],
+    n_items: int,
+    k_values: List[int] = [10, 20]
+) -> Dict[str, float]:
+    """
+    Вычисляет метрики по заранее рассчитанным top-K рекомендациям.
+    
+    Args:
+        topk_items: тензор [n_eval_users, max_k] с рекомендациями
+        user_ids: список user_id, соответствующий строкам topk_items
+        ground_truth: словарь {user_id: [item_id1, item_id2, ...]}
+        n_items: общее число айтемов
+        k_values: список значений K
+    
+    Returns:
+        Словарь метрик
+    """
+    if topk_items.numel() == 0:
+        return {}
+
+    max_k = topk_items.shape[1]
+    topk_np = topk_items.cpu().numpy()
+    metrics = {}
+
+    for k in k_values:
+        k = min(k, max_k)
+        recalls = []
+        ndcgs = []
+        precisions = []
+
+        for idx, user_id in enumerate(user_ids):
+            if user_id not in ground_truth:
+                continue
+            relevant_items = set(ground_truth[user_id])
+            if not relevant_items:
+                continue
+
+            predicted_items = topk_np[idx, :k].tolist()
+            predicted_set = set(predicted_items)
+
+            hits = len(relevant_items & predicted_set)
+            recalls.append(hits / len(relevant_items))
+            precisions.append(hits / k)
+
+            dcg = 0.0
+            for rank, item_id in enumerate(predicted_items):
+                if item_id in relevant_items:
+                    dcg += 1.0 / np.log2(rank + 2)
+            idcg = 0.0
+            num_relevant = min(len(relevant_items), k)
+            for rank in range(num_relevant):
+                idcg += 1.0 / np.log2(rank + 2)
+            ndcgs.append(dcg / idcg if idcg > 0 else 0.0)
+
+        metrics[f'recall@{k}'] = float(np.mean(recalls)) if recalls else 0.0
+        metrics[f'ndcg@{k}'] = float(np.mean(ndcgs)) if ndcgs else 0.0
+        metrics[f'precision@{k}'] = float(np.mean(precisions)) if precisions else 0.0
+
+        # Coverage и Gini считаем по всем рекомендациям
+        unique_items = set(topk_np[:, :k].flatten().tolist())
+        metrics[f'coverage@{k}'] = len(unique_items) / max(1, n_items)
+
+        item_counts = np.zeros(n_items, dtype=np.int64)
+        for item_id in topk_np[:, :k].flatten():
+            item_counts[item_id] += 1
+        item_counts = np.sort(item_counts)
+        if item_counts.sum() > 0:
+            n = len(item_counts)
+            cumsum = np.cumsum(item_counts)
+            gini = (2 * np.sum((np.arange(n) + 1) * item_counts)) / (n * cumsum[-1]) - (n + 1) / n
+            metrics[f'gini@{k}'] = float(gini)
+        else:
+            metrics[f'gini@{k}'] = 0.0
+
+    return metrics
+

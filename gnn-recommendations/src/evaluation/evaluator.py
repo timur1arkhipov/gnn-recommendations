@@ -14,7 +14,12 @@ from typing import Dict, List, Optional
 from collections import defaultdict
 
 # Импорты
-from ..training.metrics import compute_all_metrics
+from ..training.metrics import (
+    compute_metrics_from_topk,
+    mean_cosine_similarity,
+    mean_average_distance,
+    embedding_variance
+)
 from ..data.dataset import RecommendationDataset
 
 
@@ -77,76 +82,78 @@ class Evaluator:
             # Объединяем embeddings для анализа over-smoothing
             all_embeddings = torch.cat([user_emb, item_emb], dim=0)
             
-            # Вычисляем scores для всех пар
-            scores = user_emb @ item_emb.T  # [n_users, n_items]
-            
-            # ВАЖНО: Маскируем train items (и valid items если это test)
-            # чтобы они не попадали в рекомендации
-            train_mask = self._get_train_mask(dataset, scores.shape)
-            scores = scores.masked_fill(train_mask.to(self.device), float('-inf'))
-            
             # Подготавливаем ground truth из test_data
             ground_truth = self._prepare_ground_truth(test_data)
-            
-            # Вычисляем метрики (включая embedding метрики)
-            metrics = compute_all_metrics(
-                scores.cpu(),
-                ground_truth,
-                k_values=self.k_values,
-                embeddings=all_embeddings.cpu()
+            eval_users = sorted(ground_truth.keys())
+            if not eval_users:
+                return {}
+
+            max_k = max(self.k_values) if self.k_values else 10
+            topk_items = []
+            train_items = self._get_train_items_by_user(dataset)
+            batch_size = 2048
+
+            for i in range(0, len(eval_users), batch_size):
+                batch_users = eval_users[i:i + batch_size]
+                batch_tensor = torch.tensor(batch_users, device=self.device)
+                scores = user_emb[batch_tensor] @ item_emb.T
+                for row_idx, user_id in enumerate(batch_users):
+                    if user_id in train_items:
+                        items = list(train_items[user_id])
+                        if items:
+                            scores[row_idx, items] = float('-inf')
+                batch_topk = torch.topk(scores, k=max_k, dim=1).indices
+                topk_items.append(batch_topk.cpu())
+
+            topk_items = torch.cat(topk_items, dim=0)
+            metrics = compute_metrics_from_topk(
+                topk_items=topk_items,
+                user_ids=eval_users,
+                ground_truth=ground_truth,
+                n_items=dataset.n_items,
+                k_values=self.k_values
             )
-            
+
+            # Добавляем embedding метрики (анализ over-smoothing)
+            if all_embeddings is not None:
+                embeddings_cpu = all_embeddings.cpu()
+                metrics['mcs'] = mean_cosine_similarity(embeddings_cpu)
+                metrics['mad'] = mean_average_distance(embeddings_cpu)
+                metrics['variance'] = embedding_variance(embeddings_cpu)
+
             return metrics
     
-    def _get_train_mask(self, dataset: RecommendationDataset, shape: tuple) -> torch.Tensor:
-        """
-        Создаёт маску для train (и valid) items.
-        
-        Args:
-            dataset: датасет
-            shape: размер матрицы scores (n_users, n_items)
-        
-        Returns:
-            Булева маска [n_users, n_items], где True = train/valid item
-        """
-        n_users, n_items = shape
-        mask = torch.zeros(n_users, n_items, dtype=torch.bool)
-        
-        # Маскируем train items
+    def _get_train_items_by_user(self, dataset: RecommendationDataset) -> Dict[int, set]:
+        """Создаёт маппинг user_id -> set(train/valid items)."""
+        train_items = defaultdict(set)
+
         train_data = dataset.train_data
         if train_data is not None:
             if isinstance(train_data, list):
                 for row in train_data:
                     user_id = int(row.get('userId', row.get('user_id')))
                     item_id = int(row.get('itemId', row.get('item_id')))
-                    if user_id < n_users and item_id < n_items:
-                        mask[user_id, item_id] = True
+                    train_items[user_id].add(item_id)
             else:
-                # DataFrame
                 for _, row in train_data.iterrows():
                     user_id = int(row['userId'])
                     item_id = int(row['itemId'])
-                    if user_id < n_users and item_id < n_items:
-                        mask[user_id, item_id] = True
-        
-        # Также маскируем valid items при оценке на test
+                    train_items[user_id].add(item_id)
+
         valid_data = dataset.valid_data
         if valid_data is not None:
             if isinstance(valid_data, list):
                 for row in valid_data:
                     user_id = int(row.get('userId', row.get('user_id')))
                     item_id = int(row.get('itemId', row.get('item_id')))
-                    if user_id < n_users and item_id < n_items:
-                        mask[user_id, item_id] = True
+                    train_items[user_id].add(item_id)
             else:
-                # DataFrame
                 for _, row in valid_data.iterrows():
                     user_id = int(row['userId'])
                     item_id = int(row['itemId'])
-                    if user_id < n_users and item_id < n_items:
-                        mask[user_id, item_id] = True
-        
-        return mask
+                    train_items[user_id].add(item_id)
+
+        return train_items
     
     def _prepare_ground_truth(self, test_data) -> Dict[int, List[int]]:
         """

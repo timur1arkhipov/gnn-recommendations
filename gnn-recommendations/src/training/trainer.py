@@ -18,8 +18,8 @@ import json
 import time
 from collections import defaultdict
 
-from .losses import BPRLoss, RegularizedLoss
-from .metrics import compute_all_metrics
+from .losses import BPRLoss
+from .metrics import compute_all_metrics, compute_metrics_from_topk
 
 # Импорт датасета
 from ..data.dataset import RecommendationDataset
@@ -97,11 +97,7 @@ class Trainer:
             self.scheduler = None
         
         # Loss функция
-        base_loss = BPRLoss()
-        if weight_decay > 0:
-            self.loss_fn = RegularizedLoss(base_loss, weight_decay)
-        else:
-            self.loss_fn = base_loss
+        self.loss_fn = BPRLoss()
         
         # Gradient clipping для стабильности обучения GNN
         self.max_grad_norm = float(config.get('max_grad_norm', 1.0))
@@ -110,6 +106,8 @@ class Trainer:
         self.early_stopping = config.get('early_stopping', {})
         self.patience = int(self.early_stopping.get('patience', 20))
         self.min_delta = float(self.early_stopping.get('min_delta', 0.0001))
+        self.validation_metrics = config.get('validation_metrics', ['recall@10', 'ndcg@10'])
+        self.early_stopping_metric = config.get('early_stopping_metric', 'recall@10')
         
         # Состояние обучения
         self.current_epoch = 0
@@ -123,38 +121,24 @@ class Trainer:
         self.checkpoint_dir = Path(config.get('checkpoint_dir', 'results/checkpoints'))
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
     
-    def _get_train_mask(self, shape: Tuple[int, int]) -> torch.Tensor:
-        """
-        Создаёт маску для train items.
-        
-        Args:
-            shape: размер матрицы scores (n_users, n_items)
-        
-        Returns:
-            Булева маска [n_users, n_items], где True = train item
-        """
-        if not hasattr(self, '_train_mask_cache'):
-            n_users, n_items = shape
-            mask = torch.zeros(n_users, n_items, dtype=torch.bool)
-            
-            # Получаем train данные
+    def _get_train_items_by_user(self) -> Dict[int, set]:
+        """Создаёт маппинг user_id -> set(train_items)."""
+        if not hasattr(self, '_train_items_cache'):
+            train_items = defaultdict(set)
             train_data = self.dataset.train_data
             if train_data is not None:
                 if isinstance(train_data, list):
                     for row in train_data:
                         user_id = int(row['userId'])
                         item_id = int(row['itemId'])
-                        mask[user_id, item_id] = True
+                        train_items[user_id].add(item_id)
                 else:
-                    # DataFrame
                     for _, row in train_data.iterrows():
                         user_id = int(row['userId'])
                         item_id = int(row['itemId'])
-                        mask[user_id, item_id] = True
-            
-            self._train_mask_cache = mask
-        
-        return self._train_mask_cache
+                        train_items[user_id].add(item_id)
+            self._train_items_cache = train_items
+        return self._train_items_cache
     
     def _sample_batch(
         self,
@@ -190,17 +174,18 @@ class Trainer:
             # Сэмплируем отрицательный айтем (НЕ положительный для этого пользователя)
             # Повторяем сэмплирование пока не найдём negative item
             pos_items_for_user = self._user_pos_items[user_id]
-            neg_item_id = torch.randint(0, n_items, (1,)).item()
-            
-            # Если попался положительный, пересэмплируем (макс 10 попыток)
-            for _ in range(10):
-                if neg_item_id not in pos_items_for_user:
-                    break
+            user_negs = []
+            for _ in range(self.negative_samples):
                 neg_item_id = torch.randint(0, n_items, (1,)).item()
+                for _ in range(10):
+                    if neg_item_id not in pos_items_for_user:
+                        break
+                    neg_item_id = torch.randint(0, n_items, (1,)).item()
+                user_negs.append(neg_item_id)
             
             users.append(user_id)
             pos_items.append(pos_item_id)
-            neg_items.append(neg_item_id)
+            neg_items.append(user_negs)
         
         return (
             torch.tensor(users, device=self.device),
@@ -246,7 +231,10 @@ class Trainer:
         adj_matrix = adj_matrix.to(self.device)
         
         # Получаем все embeddings один раз (для эффективности)
-        user_emb, item_emb = self.model(adj_matrix)
+        if hasattr(self.model, 'get_all_embeddings'):
+            user_emb, item_emb = self.model.get_all_embeddings(adj_matrix)
+        else:
+            user_emb, item_emb = self.model(adj_matrix)
         
         # Обучение по батчам
         n_batches_total = len(train_pairs) // self.batch_size + 1
@@ -263,13 +251,13 @@ class Trainer:
             
             # Вычисляем scores
             pos_scores = (user_emb[users] * item_emb[pos_items]).sum(dim=1)
-            neg_scores = (user_emb[users] * item_emb[neg_items]).sum(dim=1)
+            if neg_items.dim() == 1:
+                neg_scores = (user_emb[users] * item_emb[neg_items]).sum(dim=1)
+            else:
+                neg_scores = (user_emb[users].unsqueeze(1) * item_emb[neg_items]).sum(dim=2)
             
             # Loss
-            if isinstance(self.loss_fn, RegularizedLoss):
-                loss = self.loss_fn(pos_scores, neg_scores, self.model)
-            else:
-                loss = self.loss_fn(pos_scores, neg_scores)
+            loss = self.loss_fn(pos_scores, neg_scores)
             
             # Backward
             self.optimizer.zero_grad()
@@ -284,7 +272,10 @@ class Trainer:
             # ВАЖНО: Обновляем embeddings после каждого батча
             # Иначе мы используем старые embeddings и модель не обучается
             with torch.no_grad():
-                user_emb, item_emb = self.model(adj_matrix)
+                if hasattr(self.model, 'get_all_embeddings'):
+                    user_emb, item_emb = self.model.get_all_embeddings(adj_matrix)
+                else:
+                    user_emb, item_emb = self.model(adj_matrix)
             
             total_loss += loss.item()
             n_batches += 1
@@ -301,48 +292,72 @@ class Trainer:
         self.model.eval()
         
         with torch.no_grad():
-            # Получаем embeddings
             adj_matrix = self.dataset.get_torch_adjacency(normalized=True)
             adj_matrix = adj_matrix.to(self.device)
-            user_emb, item_emb = self.model(adj_matrix)
-            
-            # Вычисляем scores для всех пар
-            scores = user_emb @ item_emb.T  # [n_users, n_items]
-            
-            # ВАЖНО: Маскируем train items (устанавливаем их score в -inf)
-            # чтобы они не попадали в рекомендации
-            train_mask = self._get_train_mask(scores.shape)
-            scores = scores.masked_fill(train_mask.to(self.device), float('-inf'))
-            
-            # Подготавливаем ground truth из valid_data
+            if hasattr(self.model, 'get_all_embeddings'):
+                user_emb, item_emb = self.model.get_all_embeddings(adj_matrix)
+            else:
+                user_emb, item_emb = self.model(adj_matrix)
+
             valid_data = self.dataset.valid_data
             ground_truth = defaultdict(list)
-            
             if valid_data is None:
-                # Если valid_data не загружен, загружаем из файла
                 valid_file = self.dataset.processed_data_path / "valid.txt"
                 if valid_file.exists():
                     import pandas as pd
                     valid_data = pd.read_csv(valid_file, sep='\t', header=None, names=['userId', 'itemId'])
                 else:
                     return {}
-            
+
             if isinstance(valid_data, list):
                 for row in valid_data:
                     ground_truth[int(row['userId'])].append(int(row['itemId']))
             else:
-                # Если DataFrame
                 for _, row in valid_data.iterrows():
                     ground_truth[int(row['userId'])].append(int(row['itemId']))
-            
-            # Вычисляем метрики
-            metrics = compute_all_metrics(
-                scores.cpu(),
-                ground_truth,
-                k_values=[10, 20, 50]
+
+            eval_users = sorted(ground_truth.keys())
+            if not eval_users:
+                return {}
+
+            k_values = self._parse_k_values(self.validation_metrics)
+            max_k = max(k_values) if k_values else 10
+            topk_items = []
+            train_items = self._get_train_items_by_user()
+            batch_size = max(1, min(self.batch_size, 2048))
+
+            for i in range(0, len(eval_users), batch_size):
+                batch_users = eval_users[i:i + batch_size]
+                batch_tensor = torch.tensor(batch_users, device=self.device)
+                scores = user_emb[batch_tensor] @ item_emb.T
+                for row_idx, user_id in enumerate(batch_users):
+                    if user_id in train_items:
+                        items = list(train_items[user_id])
+                        if items:
+                            scores[row_idx, items] = float('-inf')
+                batch_topk = torch.topk(scores, k=max_k, dim=1).indices
+                topk_items.append(batch_topk.cpu())
+
+            topk_items = torch.cat(topk_items, dim=0)
+            metrics = compute_metrics_from_topk(
+                topk_items=topk_items,
+                user_ids=eval_users,
+                ground_truth=ground_truth,
+                n_items=self.dataset.n_items,
+                k_values=k_values if k_values else [10]
             )
-            
             return metrics
+
+    @staticmethod
+    def _parse_k_values(metrics_list: List[str]) -> List[int]:
+        k_values = set()
+        for metric in metrics_list:
+            if '@' in metric:
+                try:
+                    k_values.add(int(metric.split('@')[-1]))
+                except ValueError:
+                    continue
+        return sorted(k_values)
     
     def train(self) -> Dict:
         """
@@ -385,18 +400,19 @@ class Trainer:
                 valid_metrics = self.validate()
                 self.valid_metrics.append(valid_metrics)
                 
-                # Основная метрика для early stopping (Recall@10)
-                current_metric = valid_metrics.get('recall@10', 0.0)
+                # Основная метрика для early stopping
+                current_metric = valid_metrics.get(self.early_stopping_metric, 0.0)
                 
                 # Текущий learning rate
                 current_lr = self.optimizer.param_groups[0]['lr']
                 
                 # Логирование
+                ndcg10 = valid_metrics.get('ndcg@10', 0.0)
                 print(f"Epoch {epoch:3d}/{self.epochs} | "
                       f"LR: {current_lr:.6f} | "
                       f"Train Loss: {train_loss:.4f} | "
-                      f"Recall@10: {current_metric:.4f} | "
-                      f"NDCG@10: {valid_metrics.get('ndcg@10', 0.0):.4f}")
+                      f"{self.early_stopping_metric}: {current_metric:.4f} | "
+                      f"NDCG@10: {ndcg10:.4f}")
                 
                 # Early stopping
                 if current_metric > self.best_metric + self.min_delta:
