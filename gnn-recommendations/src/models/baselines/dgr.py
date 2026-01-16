@@ -65,6 +65,7 @@ class DGR(BaseRecommender):
         else:
             self.dropout_layer = None
         
+        self._reg_loss = None
         self.reset_parameters()
     
     def reset_parameters(self):
@@ -95,6 +96,7 @@ class DGR(BaseRecommender):
         
         x = x_init
         x_prev = x_init
+        reg_loss = 0.0
         
         # Прохождение через слои
         for weight in self.weights:
@@ -110,6 +112,9 @@ class DGR(BaseRecommender):
             # Desmoothing: комбинация текущего и предыдущего слоя
             x = (1 - self.lambda_reg) * x_transformed + self.lambda_reg * x_prev
             
+            # Регуляризация: поощряем отличие от предыдущего слоя (anti-smoothing)
+            reg_loss = reg_loss + (x - x_prev).pow(2).mean()
+            
             # Dropout
             if self.dropout_layer is not None:
                 x = self.dropout_layer(x)
@@ -122,6 +127,9 @@ class DGR(BaseRecommender):
             [self.n_users, self.n_items],
             dim=0
         )
+        
+        # Сохраняем регуляризацию для тренера
+        self._reg_loss = self.lambda_reg * reg_loss
         
         return user_emb, item_emb
     
@@ -146,4 +154,10 @@ class DGR(BaseRecommender):
         if adj_matrix is None:
             raise ValueError("adj_matrix должен быть передан для DGR")
         return self.forward(adj_matrix)
+
+    def get_regularization_loss(self) -> torch.Tensor:
+        """Возвращает регуляризационный терм (если есть)."""
+        if self._reg_loss is None:
+            return torch.tensor(0.0, device=self.user_embedding.weight.device)
+        return self._reg_loss
 

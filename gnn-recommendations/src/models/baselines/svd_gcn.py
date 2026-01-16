@@ -9,6 +9,9 @@ SVD-GCN - GCN с использованием SVD декомпозиции.
 import torch
 import torch.nn as nn
 from typing import Tuple, Optional
+import numpy as np
+import scipy.sparse as sp
+from scipy.sparse.linalg import svds
 
 from ..base import BaseRecommender
 
@@ -64,6 +67,7 @@ class SVD_GCN(BaseRecommender):
         self.register_buffer('S', None)
         self.register_buffer('V', None)
         self._svd_computed = False
+        self._svd_device = None
         
         # Dropout
         if dropout > 0:
@@ -85,25 +89,37 @@ class SVD_GCN(BaseRecommender):
         if self._svd_computed and self.U is not None:
             return
         
-        # Преобразуем в dense, если sparse
+        # Для больших sparse матриц используем scipy.sparse.linalg.svds (CPU)
         if adj_matrix.is_sparse:
-            adj_dense = adj_matrix.to_dense()
+            adj_matrix = adj_matrix.coalesce()
+            indices = adj_matrix.indices().cpu().numpy()
+            values = adj_matrix.values().cpu().numpy()
+            shape = adj_matrix.shape
+            adj_sp = sp.coo_matrix((values, (indices[0], indices[1])), shape=shape)
+            
+            k = min(self.rank, min(shape) - 1) if min(shape) > 1 else 1
+            U, S, Vt = svds(adj_sp, k=k)
+            # svds возвращает сингулярные значения по возрастанию -> разворачиваем
+            idx = np.argsort(S)[::-1]
+            U = U[:, idx]
+            S = S[idx]
+            V = Vt.T[:, idx]
+            
+            self.U = torch.tensor(U, dtype=torch.float32)
+            self.S = torch.tensor(S, dtype=torch.float32)
+            self.V = torch.tensor(V, dtype=torch.float32)
         else:
             adj_dense = adj_matrix
+            try:
+                U, S, Vh = torch.linalg.svd(adj_dense, full_matrices=False)
+                V = Vh.T
+            except AttributeError:
+                U, S, V = torch.svd(adj_dense)
+            
+            self.U = U[:, :self.rank].detach().cpu()
+            self.S = S[:self.rank].detach().cpu()
+            self.V = V[:, :self.rank].detach().cpu()
         
-        # SVD декомпозиция
-        # Используем torch.linalg.svd (современный API)
-        try:
-            U, S, Vh = torch.linalg.svd(adj_dense, full_matrices=False)
-            V = Vh.T  # Vh - это V^T, нужно транспонировать
-        except AttributeError:
-            # Для старых версий PyTorch используем torch.svd
-            U, S, V = torch.svd(adj_dense)
-        
-        # Сохраняем только top-k компонент
-        self.U = U[:, :self.rank]
-        self.S = S[:self.rank]
-        self.V = V[:, :self.rank]
         self._svd_computed = True
     
     def forward(
@@ -127,6 +143,13 @@ class SVD_GCN(BaseRecommender):
             self.user_embedding.weight,
             self.item_embedding.weight
         ], dim=0)
+        
+        # Гарантируем, что SVD компоненты на том же устройстве
+        if self._svd_device != x.device:
+            self.U = self.U.to(x.device)
+            self.S = self.S.to(x.device)
+            self.V = self.V.to(x.device)
+            self._svd_device = x.device
         
         # Прохождение через слои
         for weight in self.weights:

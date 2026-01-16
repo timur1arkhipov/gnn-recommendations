@@ -258,6 +258,8 @@ class Trainer:
             
             # Loss
             loss = self.loss_fn(pos_scores, neg_scores)
+            if hasattr(self.model, 'get_regularization_loss'):
+                loss = loss + self.model.get_regularization_loss()
             
             # Backward
             self.optimizer.zero_grad()

@@ -104,29 +104,28 @@ class GCNII(BaseRecommender):
         
         x = x_init
         
-        # Прохождение через слои
-        for i, weight in enumerate(self.weights):
-            # Графовая свертка
+        # Прохождение через слои (упрощенная, но ближе к оригиналу GCNII)
+        # H^{(l+1)} = sigma( ( (1-α) * A * H^{(l)} + α * H^{(0)} ) * ( (1-β_l)I + β_l W_l ) )
+        for i, weight in enumerate(self.weights, start=1):
             if adj_matrix.is_sparse:
                 x_conv = torch.sparse.mm(adj_matrix, x)
             else:
                 x_conv = torch.mm(adj_matrix, x)
             
-            # Линейное преобразование
-            x_transformed = x_conv @ weight
+            # Identity mapping
+            x_conv = (1 - self.alpha) * x_conv + self.alpha * x_init
             
-            # Identity mapping: x = (1 - alpha) * x_transformed + alpha * x_init
-            x = (1 - self.alpha) * x_transformed + self.alpha * x_init
+            # Layer-wise beta (как в статье: β_l = log(λ/l + 1))
+            beta_l = torch.log(torch.tensor(self.beta / i + 1.0, device=x.device))
             
-            # Residual connection: x = (1 - beta) * x + beta * x_prev
-            if i > 0:
-                x = (1 - self.beta) * x + self.beta * x_prev
+            # Линейное преобразование с пропуском identity
+            x_transformed = (1 - beta_l) * x_conv + beta_l * (x_conv @ weight)
             
             # Dropout
             if self.dropout_layer is not None:
-                x = self.dropout_layer(x)
+                x_transformed = self.dropout_layer(x_transformed)
             
-            x_prev = x
+            x = x_transformed
         
         # Разделить обратно на users и items
         user_emb, item_emb = torch.split(
