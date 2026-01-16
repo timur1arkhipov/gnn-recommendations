@@ -10,7 +10,7 @@ filtering:
 
 # Разделение данных
 split:
-  strategy: "temporal"  # или "random"
+  strategy: "random"  # или "random"
   train_ratio: 0.7
   valid_ratio: 0.1
   test_ratio: 0.2

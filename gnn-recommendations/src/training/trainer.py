@@ -230,12 +230,6 @@ class Trainer:
         adj_matrix = self.dataset.get_torch_adjacency(normalized=True)
         adj_matrix = adj_matrix.to(self.device)
         
-        # Получаем все embeddings один раз (для эффективности)
-        if hasattr(self.model, 'get_all_embeddings'):
-            user_emb, item_emb = self.model.get_all_embeddings(adj_matrix)
-        else:
-            user_emb, item_emb = self.model(adj_matrix)
-        
         # Обучение по батчам
         n_batches_total = len(train_pairs) // self.batch_size + 1
         
@@ -248,6 +242,13 @@ class Trainer:
             
             if len(users) == 0:
                 continue
+            
+            # Получаем актуальные embeddings для текущего батча
+            # Важно: без no_grad, чтобы сохранить граф для backprop
+            if hasattr(self.model, 'get_all_embeddings'):
+                user_emb, item_emb = self.model.get_all_embeddings(adj_matrix)
+            else:
+                user_emb, item_emb = self.model(adj_matrix)
             
             # Вычисляем scores
             pos_scores = (user_emb[users] * item_emb[pos_items]).sum(dim=1)
@@ -270,14 +271,6 @@ class Trainer:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
             
             self.optimizer.step()
-            
-            # ВАЖНО: Обновляем embeddings после каждого батча
-            # Иначе мы используем старые embeddings и модель не обучается
-            with torch.no_grad():
-                if hasattr(self.model, 'get_all_embeddings'):
-                    user_emb, item_emb = self.model.get_all_embeddings(adj_matrix)
-                else:
-                    user_emb, item_emb = self.model(adj_matrix)
             
             total_loss += loss.item()
             n_batches += 1

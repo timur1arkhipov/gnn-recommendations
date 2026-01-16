@@ -169,7 +169,7 @@ def convert_to_torch_sparse(adj: sp.coo_matrix) -> torch.sparse.FloatTensor:
     values_tensor = torch.FloatTensor(values)
     size = torch.Size(adj.shape)
     
-    sparse_tensor = torch.sparse.FloatTensor(indices_tensor, values_tensor, size)
+    sparse_tensor = torch.sparse_coo_tensor(indices_tensor, values_tensor, size)
     
     return sparse_tensor
 

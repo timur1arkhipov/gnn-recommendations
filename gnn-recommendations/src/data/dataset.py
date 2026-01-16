@@ -271,7 +271,7 @@ class RecommendationDataset:
     
     def split(
         self,
-        strategy: str = 'temporal',
+        strategy: str = 'random',
         train_ratio: Optional[float] = None,
         valid_ratio: Optional[float] = None,
         test_ratio: Optional[float] = None
