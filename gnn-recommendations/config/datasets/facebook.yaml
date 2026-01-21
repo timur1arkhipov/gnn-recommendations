@@ -1,0 +1,26 @@
+# Настройки датасета Facebook
+
+name: "facebook"
+data_path: "data/raw"
+
+# Бинаризация (Facebook - implicit feedback, уже в бинарном виде)
+binarize:
+  rating_threshold: 0.0  # Не применяем фильтрацию по рейтингу для Facebook
+
+# Фильтрация
+filtering:
+  min_user_interactions: 10
+  min_item_interactions: 10
+
+# Разделение данных (глобальный 80-10-10 split)
+split:
+  strategy: "random_global"  # Глобальное случайное разбиение
+  train_ratio: 0.8
+  valid_ratio: 0.1
+  test_ratio: 0.1
+  seed: 42
+
+# Граф
+graph:
+  normalize: true
+  self_loop: false

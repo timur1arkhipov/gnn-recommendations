@@ -1,0 +1,26 @@
+# Настройки датасета MovieLens-1M
+
+name: "ml-1m"
+data_path: "data/raw/ml-1m"
+
+# Бинаризация (преобразование в implicit feedback)
+binarize:
+  rating_threshold: 3.0  # Рейтинг >= 3 считается положительным
+
+# Фильтрация
+filtering:
+  min_user_interactions: 10
+  min_item_interactions: 10
+
+# Разделение данных (глобальный 80-10-10 split)
+split:
+  strategy: "random_global"  # Глобальное случайное разбиение
+  train_ratio: 0.8
+  valid_ratio: 0.1
+  test_ratio: 0.1
+  seed: 42
+
+# Граф
+graph:
+  normalize: true
+  self_loop: false

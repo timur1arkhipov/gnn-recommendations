@@ -67,15 +67,16 @@ class BaseDatasetLoader(ABC):
 
 
 class MovieLensLoader(BaseDatasetLoader):
-    """Загрузчик для датасета MovieLens."""
-    
+    """Загрузчик для датасета MovieLens (1M, 100k и др.)."""
+
     def load(self, data_path: Path) -> pd.DataFrame:
         """
         Загружает данные MovieLens.
-        
-        Формат:
+
+        Поддерживаемые форматы:
         - ratings.csv с колонками userId, movieId, rating, timestamp
         - ratings.dat (MovieLens-1M) с разделителем "::"
+        - u.data (MovieLens-100k) с разделителем табуляция
         """
         # Ищем файл ratings.csv
         ratings_file = data_path / "ratings.csv"
@@ -84,13 +85,13 @@ class MovieLensLoader(BaseDatasetLoader):
             ratings_file = data_path.parent / "movie_lens" / "ratings.csv"
         if not ratings_file.exists():
             ratings_file = data_path.parent.parent / "data" / "raw" / "movie_lens" / "ratings.csv"
-        
+
         df = pd.DataFrame()
         if ratings_file.exists():
             # Загружаем данные
             df = pd.read_csv(ratings_file)
         else:
-            # Пробуем MovieLens-1M формат
+            # Пробуем MovieLens-1M формат (ratings.dat)
             ratings_dat = data_path / "ratings.dat"
             if not ratings_dat.exists():
                 ratings_dat = data_path.parent / "movie_lens" / "ratings.dat"
@@ -105,13 +106,30 @@ class MovieLensLoader(BaseDatasetLoader):
                     names=["userId", "movieId", "rating", "timestamp"]
                 )
             else:
-                raise FileNotFoundError(f"Файл ratings.csv/ratings.dat не найден в {data_path}")
-        
+                # Пробуем MovieLens-100k формат (u.data)
+                udata_file = data_path / "u.data"
+                if not udata_file.exists():
+                    udata_file = data_path.parent / "ml-100k" / "u.data"
+                if not udata_file.exists():
+                    udata_file = data_path.parent.parent / "data" / "raw" / "ml-100k" / "u.data"
+
+                if udata_file.exists():
+                    df = pd.read_csv(
+                        udata_file,
+                        sep="\t",
+                        names=["userId", "movieId", "rating", "timestamp"]
+                    )
+                else:
+                    raise FileNotFoundError(
+                        f"Файл с рейтингами не найден в {data_path}\n"
+                        f"Искали: ratings.csv, ratings.dat, u.data"
+                    )
+
         # Нормализуем колонки: movieId -> itemId
         df = self._normalize_columns(df, {'itemId': 'movieId'})
-        
+
         print(f"Загружено {len(df)} взаимодействий из MovieLens")
-        
+
         return df
 
 
@@ -320,9 +338,116 @@ class GowallaLoader(BaseDatasetLoader):
             return pd.DataFrame()
 
 
+class AmazonBooksLoader(BaseDatasetLoader):
+    """Загрузчик для датасета Amazon Books."""
+
+    def load(self, data_path: Path) -> pd.DataFrame:
+        """
+        Загружает данные Amazon Books.
+
+        Формат: Books_rating.csv с колонками:
+        - Id: ID книги
+        - User_id: ID пользователя
+        - review/score: рейтинг (обычно 1-5)
+        - review/time: timestamp (опционально)
+        """
+        # Ищем файл Books_rating.csv
+        ratings_file = data_path / "Books_rating.csv"
+        if not ratings_file.exists():
+            ratings_file = data_path.parent / "amazon_books" / "Books_rating.csv"
+        if not ratings_file.exists():
+            ratings_file = data_path.parent.parent / "data" / "raw" / "Books_rating.csv"
+
+        if not ratings_file.exists():
+            raise FileNotFoundError(
+                f"Файл Books_rating.csv не найден в {data_path}"
+            )
+
+        print(f"Загрузка данных Amazon Books из {ratings_file.name}...")
+        print("Это может занять некоторое время (большой файл)...")
+
+        # Загружаем только нужные колонки для экономии памяти
+        try:
+            df = pd.read_csv(
+                ratings_file,
+                usecols=['Id', 'User_id', 'review/score', 'review/time'],
+                dtype={'Id': str, 'User_id': str, 'review/score': float}
+            )
+        except Exception as e:
+            print(f"Не удалось загрузить с указанными колонками, пробуем полную загрузку: {e}")
+            df = pd.read_csv(ratings_file)
+
+        print(f"Загружено {len(df)} строк")
+        print(f"Колонки: {list(df.columns)}")
+
+        # Нормализуем колонки
+        column_mapping = {
+            'userId': 'User_id',
+            'itemId': 'Id',
+            'rating': 'review/score',
+            'timestamp': 'review/time'
+        }
+
+        df = self._normalize_columns(df, column_mapping)
+
+        # Удаляем строки с NaN в обязательных полях
+        initial_count = len(df)
+        df = df.dropna(subset=['userId', 'itemId', 'rating'])
+        if len(df) < initial_count:
+            print(f"Удалено {initial_count - len(df)} строк с некорректными данными")
+
+        print(f"Загружено {len(df)} взаимодействий из Amazon Books")
+        print(f"Уникальных пользователей: {df['userId'].nunique()}")
+        print(f"Уникальных книг: {df['itemId'].nunique()}")
+        print(f"Диапазон рейтингов: {df['rating'].min()} - {df['rating'].max()}")
+
+        return df
+
+
+class FacebookLoader(BaseDatasetLoader):
+    """Загрузчик для датасета Facebook."""
+
+    def load(self, data_path: Path) -> pd.DataFrame:
+        """
+        Загружает данные Facebook.
+
+        Формат: dataset_facebook.tsv
+        - userId itemId rating (разделитель - табуляция, без timestamp)
+        """
+        # Ищем файл dataset_facebook.tsv
+        facebook_file = data_path / "dataset_facebook.tsv"
+        if not facebook_file.exists():
+            facebook_file = data_path.parent / "facebook" / "dataset_facebook.tsv"
+        if not facebook_file.exists():
+            facebook_file = data_path.parent.parent / "data" / "raw" / "dataset_facebook.tsv"
+
+        if not facebook_file.exists():
+            raise FileNotFoundError(
+                f"Файл dataset_facebook.tsv не найден в {data_path}"
+            )
+
+        print(f"Загрузка данных Facebook из {facebook_file.name}...")
+
+        # Загружаем TSV файл
+        df = pd.read_csv(
+            facebook_file,
+            sep='\t',
+            header=None,
+            names=['userId', 'itemId', 'rating']
+        )
+
+        print(f"Загружено {len(df)} взаимодействий из Facebook")
+        print(f"Уникальных пользователей: {df['userId'].nunique()}")
+        print(f"Уникальных айтемов: {df['itemId'].nunique()}")
+        if 'rating' in df.columns:
+            print(f"Диапазон весов: {df['rating'].min()} - {df['rating'].max()}")
+
+        return df
+
+
 class BookCrossingLoader(BaseDatasetLoader):
     """Загрузчик для датасета Book-Crossing."""
-    
+
     def load(self, data_path: Path) -> pd.DataFrame:
         """
         Загружает данные Book-Crossing.
@@ -416,9 +541,14 @@ class BookCrossingLoader(BaseDatasetLoader):
 LOADER_REGISTRY = {
     'movie_lens': MovieLensLoader,
     'movielens1m': MovieLensLoader,
+    'movielens100k': MovieLensLoader,
+    'ml-1m': MovieLensLoader,
+    'ml-100k': MovieLensLoader,
     'gowalla': GowallaLoader,
     'book_crossing': BookCrossingLoader,
     'book-crossing': BookCrossingLoader,
+    'amazon_books': AmazonBooksLoader,
+    'facebook': FacebookLoader,
 }
 
 

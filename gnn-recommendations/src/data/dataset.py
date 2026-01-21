@@ -66,12 +66,17 @@ class RecommendationDataset:
             config_name_mapping = {
                 'movie_lens': 'movielens1m',
                 'movielens1m': 'movielens1m',
+                'ml-1m': 'ml-1m',
+                'ml-100k': 'ml-100k',
+                'movielens100k': 'ml-100k',
                 'book_crossing': 'book_crossing',
                 'book-crossing': 'book_crossing',
+                'amazon_books': 'amazon_books',
+                'facebook': 'facebook',
                 'gowalla': 'gowalla',
                 'yelp2018': 'yelp2018',
             }
-            
+
             # Получаем имя конфига из маппинга или используем исходное имя
             config_name = config_name_mapping.get(name, name)
             config_path = self.root_dir / "config" / "datasets" / f"{config_name}.yaml"
@@ -216,7 +221,11 @@ class RecommendationDataset:
             if 'binarize' in self.config and 'rating_threshold' in self.config['binarize']:
                 rating_threshold = self.config['binarize']['rating_threshold']
             else:
-                rating_threshold = 4.0 if self.name in ['movie_lens', 'movielens1m'] else 0.0
+                # Значения по умолчанию: >= 3.0 для explicit feedback датасетов, 0.0 для implicit
+                if self.name in ['facebook']:
+                    rating_threshold = 0.0  # Facebook - implicit feedback, без фильтрации
+                else:
+                    rating_threshold = 3.0  # MovieLens, Amazon Books - explicit feedback
         rating_col = 'rating' if 'rating' in df.columns else None
         df = binarize_interactions(df, rating_col=rating_col, threshold=rating_threshold)
 
@@ -271,44 +280,108 @@ class RecommendationDataset:
     
     def split(
         self,
-        strategy: str = 'random',
+        strategy: Optional[str] = None,
         train_ratio: Optional[float] = None,
         valid_ratio: Optional[float] = None,
-        test_ratio: Optional[float] = None
+        test_ratio: Optional[float] = None,
+        seed: Optional[int] = None
     ):
         """
         Разделяет данные на train/valid/test.
-        
+
         Стратегии:
-        - 'temporal': разделение по времени (для временных данных)
-        - 'random': случайное разделение
-        
+        - 'temporal': разделение по времени (для временных данных, per-user)
+        - 'random': случайное разделение (per-user)
+        - 'random_global': глобальное случайное разбиение 80-10-10
+
         Args:
             strategy: стратегия разделения
             train_ratio: доля обучающей выборки
             valid_ratio: доля валидационной выборки
             test_ratio: доля тестовой выборки
+            seed: random seed для воспроизводимости
         """
-        print(f"\n{'='*60}")
-        print(f"Разделение данных: {strategy}")
-        print(f"{'='*60}")
-        
         if self.processed_data is None:
             self.preprocess()
-        
+
         df = self.processed_data.copy()
-        
+
         # Получаем параметры из конфига, если не указаны
         split_config = self.config['split']
+        strategy = strategy or split_config.get('strategy', 'random')
         train_ratio = train_ratio or split_config['train_ratio']
         valid_ratio = valid_ratio or split_config['valid_ratio']
         test_ratio = test_ratio or split_config['test_ratio']
-        
+        seed = seed or split_config.get('seed', 42)
+
+        print(f"\n{'='*60}")
+        print(f"Разделение данных: {strategy}")
+        print(f"Train: {train_ratio*100:.0f}% | Valid: {valid_ratio*100:.0f}% | Test: {test_ratio*100:.0f}%")
+        print(f"Seed: {seed}")
+        print(f"{'='*60}")
+
         # Проверяем, что сумма = 1.0
         assert abs(train_ratio + valid_ratio + test_ratio - 1.0) < 1e-6, \
             "Сумма долей должна быть равна 1.0"
-        
-        if strategy == 'temporal':
+
+        if strategy == 'random_global':
+            # Глобальный случайный split 80-10-10
+            # Процесс:
+            # 1. Первое разбиение: 80% train, 20% temp_test
+            # 2. Второе разбиение: 50% validation, 50% test из temp_test
+            # 3. Фильтрация: val и test содержат только пользователей и айтемы из train
+
+            from sklearn.model_selection import train_test_split
+
+            print("\n1. Первое разбиение (train / temp_test)...")
+            train_data, temp_test = train_test_split(
+                df,
+                test_size=(valid_ratio + test_ratio),
+                random_state=seed
+            )
+
+            print(f"   Train: {len(train_data)} ({len(train_data)/len(df)*100:.1f}%)")
+            print(f"   Temp test: {len(temp_test)} ({len(temp_test)/len(df)*100:.1f}%)")
+
+            print("\n2. Второе разбиение (validation / test из temp_test)...")
+            # Разделяем temp_test пополам на validation и test
+            valid_data, test_data = train_test_split(
+                temp_test,
+                test_size=0.5,  # 50% от temp_test
+                random_state=seed
+            )
+
+            print(f"   Validation: {len(valid_data)} ({len(valid_data)/len(df)*100:.1f}%)")
+            print(f"   Test: {len(test_data)} ({len(test_data)/len(df)*100:.1f}%)")
+
+            # Сохраняем данные перед фильтрацией
+            self.train_data = train_data.copy()
+            self.valid_data = valid_data.copy()
+            self.test_data = test_data.copy()
+
+            print("\n3. Фильтрация (трансдуктивная оценка)...")
+            # Удаляем cold-start взаимодействия в valid/test
+            # val и test должны содержать только пользователей и айтемы из train
+            train_users = set(self.train_data['userId'].unique())
+            train_items = set(self.train_data['itemId'].unique())
+            before_valid = len(self.valid_data)
+            before_test = len(self.test_data)
+
+            self.valid_data = self.valid_data[
+                self.valid_data['userId'].isin(train_users) &
+                self.valid_data['itemId'].isin(train_items)
+            ].copy()
+            self.test_data = self.test_data[
+                self.test_data['userId'].isin(train_users) &
+                self.test_data['itemId'].isin(train_items)
+            ].copy()
+
+            print(f"   Valid: {before_valid} -> {len(self.valid_data)} "
+                  f"(удалено {before_valid - len(self.valid_data)} cold-start)")
+            print(f"   Test: {before_test} -> {len(self.test_data)} "
+                  f"(удалено {before_test - len(self.test_data)} cold-start)")
+
+        elif strategy == 'temporal':
             # Per-user temporal split: последние взаимодействия пользователя идут в valid/test
             if 'timestamp' in df.columns:
                 df = df.sort_values(['userId', 'timestamp'])
@@ -368,26 +441,26 @@ class RecommendationDataset:
             self.valid_data = pd.concat(valid_rows, ignore_index=True) if valid_rows else pd.DataFrame(columns=df.columns)
             self.test_data = pd.concat(test_rows, ignore_index=True) if test_rows else pd.DataFrame(columns=df.columns)
 
-        # Удаляем cold-start взаимодействия в valid/test
-        train_users = set(self.train_data['userId'].unique())
-        train_items = set(self.train_data['itemId'].unique())
-        before_valid = len(self.valid_data)
-        before_test = len(self.test_data)
+            # Удаляем cold-start взаимодействия в valid/test (только для per-user split)
+            train_users = set(self.train_data['userId'].unique())
+            train_items = set(self.train_data['itemId'].unique())
+            before_valid = len(self.valid_data)
+            before_test = len(self.test_data)
 
-        if not self.valid_data.empty:
-            self.valid_data = self.valid_data[
-                self.valid_data['userId'].isin(train_users) &
-                self.valid_data['itemId'].isin(train_items)
-            ].copy()
-        if not self.test_data.empty:
-            self.test_data = self.test_data[
-                self.test_data['userId'].isin(train_users) &
-                self.test_data['itemId'].isin(train_items)
-            ].copy()
+            if not self.valid_data.empty:
+                self.valid_data = self.valid_data[
+                    self.valid_data['userId'].isin(train_users) &
+                    self.valid_data['itemId'].isin(train_items)
+                ].copy()
+            if not self.test_data.empty:
+                self.test_data = self.test_data[
+                    self.test_data['userId'].isin(train_users) &
+                    self.test_data['itemId'].isin(train_items)
+                ].copy()
 
-        if before_valid != len(self.valid_data) or before_test != len(self.test_data):
-            print(f"Удалены cold-start взаимодействия: valid {before_valid}->{len(self.valid_data)}, "
-                  f"test {before_test}->{len(self.test_data)}")
+            if before_valid != len(self.valid_data) or before_test != len(self.test_data):
+                print(f"Удалены cold-start взаимодействия: valid {before_valid}->{len(self.valid_data)}, "
+                      f"test {before_test}->{len(self.test_data)}")
         
         print(f"Train: {len(self.train_data)} взаимодействий")
         print(f"Valid: {len(self.valid_data)} взаимодействий")

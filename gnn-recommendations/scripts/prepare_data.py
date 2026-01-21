@@ -81,8 +81,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        default="movie_lens",
-        choices=["movie_lens", "book_crossing", "book-crossing", "gowalla"],
+        default="ml-1m",
+        choices=["ml-100k", "ml-1m", "facebook", "amazon_books"],
         help="Название датасета"
     )
     parser.add_argument(
