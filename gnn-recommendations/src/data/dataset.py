@@ -281,25 +281,23 @@ class RecommendationDataset:
     def split(
         self,
         strategy: Optional[str] = None,
-        train_ratio: Optional[float] = None,
-        valid_ratio: Optional[float] = None,
-        test_ratio: Optional[float] = None,
         seed: Optional[int] = None
     ):
         """
-        Разделяет данные на train/valid/test.
+        Разделяет данные на train/valid/test по временному принципу (per-user temporal split).
 
-        Стратегии:
-        - 'temporal': разделение по времени (для временных данных, per-user)
-        - 'random': случайное разделение (per-user)
-        - 'random_global': глобальное случайное разбиение 80-10-10
+        Стратегия 'temporal':
+        - Для каждого пользователя сортируем его взаимодействия по времени
+        - Последнее взаимодействие → test
+        - Предпоследнее взаимодействие → validation
+        - Все остальные → train
+
+        Это гарантирует реалистичную оценку: модель обучается на прошлом,
+        предсказывает будущее.
 
         Args:
-            strategy: стратегия разделения
-            train_ratio: доля обучающей выборки
-            valid_ratio: доля валидационной выборки
-            test_ratio: доля тестовой выборки
-            seed: random seed для воспроизводимости
+            strategy: стратегия разделения (по умолчанию 'temporal', другие не поддерживаются)
+            seed: random seed для воспроизводимости (не используется в temporal split)
         """
         if self.processed_data is None:
             self.preprocess()
@@ -308,164 +306,60 @@ class RecommendationDataset:
 
         # Получаем параметры из конфига, если не указаны
         split_config = self.config['split']
-        strategy = strategy or split_config.get('strategy', 'random')
-        train_ratio = train_ratio or split_config['train_ratio']
-        valid_ratio = valid_ratio or split_config['valid_ratio']
-        test_ratio = test_ratio or split_config['test_ratio']
+        strategy = strategy or split_config.get('strategy', 'temporal')
         seed = seed or split_config.get('seed', 42)
+
+        # Проверяем стратегию
+        if strategy != 'temporal':
+            raise ValueError(
+                f"Стратегия '{strategy}' не поддерживается. "
+                f"Используйте 'temporal' для per-user temporal split."
+            )
 
         print(f"\n{'='*60}")
         print(f"Разделение данных: {strategy}")
-        print(f"Train: {train_ratio*100:.0f}% | Valid: {valid_ratio*100:.0f}% | Test: {test_ratio*100:.0f}%")
         print(f"Seed: {seed}")
         print(f"{'='*60}")
 
-        # Проверяем, что сумма = 1.0
-        assert abs(train_ratio + valid_ratio + test_ratio - 1.0) < 1e-6, \
-            "Сумма долей должна быть равна 1.0"
-
-        if strategy == 'random_global':
-            # Глобальный случайный split 80-10-10
-            # Процесс:
-            # 1. Первое разбиение: 80% train, 20% temp_test
-            # 2. Второе разбиение: 50% validation, 50% test из temp_test
-            # 3. Фильтрация: val и test содержат только пользователей и айтемы из train
-
-            from sklearn.model_selection import train_test_split
-
-            print("\n1. Первое разбиение (train / temp_test)...")
-            train_data, temp_test = train_test_split(
-                df,
-                test_size=(valid_ratio + test_ratio),
-                random_state=seed
+        # Per-user temporal split: последние взаимодействия пользователя идут в valid/test
+        if 'timestamp' not in df.columns:
+            raise ValueError(
+                "Temporal split требует колонку 'timestamp'. "
+                f"Датасет {self.name} не содержит временные метки."
             )
 
-            print(f"   Train: {len(train_data)} ({len(train_data)/len(df)*100:.1f}%)")
-            print(f"   Temp test: {len(temp_test)} ({len(temp_test)/len(df)*100:.1f}%)")
+        print("\nСортировка по пользователям и времени...")
+        df = df.sort_values(['userId', 'timestamp'])
 
-            print("\n2. Второе разбиение (validation / test из temp_test)...")
-            # Разделяем temp_test пополам на validation и test
-            valid_data, test_data = train_test_split(
-                temp_test,
-                test_size=0.5,  # 50% от temp_test
-                random_state=seed
-            )
+        train_rows = []
+        valid_rows = []
+        test_rows = []
 
-            print(f"   Validation: {len(valid_data)} ({len(valid_data)/len(df)*100:.1f}%)")
-            print(f"   Test: {len(test_data)} ({len(test_data)/len(df)*100:.1f}%)")
+        print("Разделение для каждого пользователя...")
+        for user_id, group in df.groupby('userId'):
+            n = len(group)
+            if n >= 3:
+                # Полный split: train/valid/test
+                test_rows.append(group.iloc[-1])      # последнее
+                valid_rows.append(group.iloc[-2])     # предпоследнее
+                train_rows.append(group.iloc[:-2])    # все остальные
+            elif n == 2:
+                # Частичный split: train/test (без valid)
+                test_rows.append(group.iloc[-1])
+                train_rows.append(group.iloc[:1])
+            else:  # n == 1
+                # Минимальный split: только train
+                train_rows.append(group)
 
-            # Сохраняем данные перед фильтрацией
-            self.train_data = train_data.copy()
-            self.valid_data = valid_data.copy()
-            self.test_data = test_data.copy()
+        self.train_data = pd.concat(train_rows, ignore_index=True)
+        self.valid_data = pd.DataFrame(valid_rows) if valid_rows else pd.DataFrame(columns=df.columns)
+        self.test_data = pd.DataFrame(test_rows) if test_rows else pd.DataFrame(columns=df.columns)
 
-            print("\n3. Фильтрация (трансдуктивная оценка)...")
-            # Удаляем cold-start взаимодействия в valid/test
-            # val и test должны содержать только пользователей и айтемы из train
-            train_users = set(self.train_data['userId'].unique())
-            train_items = set(self.train_data['itemId'].unique())
-            before_valid = len(self.valid_data)
-            before_test = len(self.test_data)
+        print(f"\nРезультат разделения:")
+        print(f"  Train: {len(self.train_data)} взаимодействий ({len(self.train_data)/len(df)*100:.1f}%)")
+        print(f"  Valid: {len(self.valid_data)} взаимодействий ({len(self.valid_data)/len(df)*100:.1f}%)")
+        print(f"  Test:  {len(self.test_data)} взаимодействий ({len(self.test_data)/len(df)*100:.1f}%)")
 
-            self.valid_data = self.valid_data[
-                self.valid_data['userId'].isin(train_users) &
-                self.valid_data['itemId'].isin(train_items)
-            ].copy()
-            self.test_data = self.test_data[
-                self.test_data['userId'].isin(train_users) &
-                self.test_data['itemId'].isin(train_items)
-            ].copy()
-
-            print(f"   Valid: {before_valid} -> {len(self.valid_data)} "
-                  f"(удалено {before_valid - len(self.valid_data)} cold-start)")
-            print(f"   Test: {before_test} -> {len(self.test_data)} "
-                  f"(удалено {before_test - len(self.test_data)} cold-start)")
-
-        elif strategy == 'temporal':
-            # Per-user temporal split: последние взаимодействия пользователя идут в valid/test
-            if 'timestamp' in df.columns:
-                df = df.sort_values(['userId', 'timestamp'])
-                train_rows = []
-                valid_rows = []
-                test_rows = []
-                for _, group in df.groupby('userId'):
-                    n = len(group)
-                    if n >= 3:
-                        test_rows.append(group.iloc[-1])
-                        valid_rows.append(group.iloc[-2])
-                        train_rows.append(group.iloc[:-2])
-                    elif n == 2:
-                        test_rows.append(group.iloc[-1])
-                        train_rows.append(group.iloc[:1])
-                    else:
-                        train_rows.append(group)
-
-                self.train_data = pd.concat(train_rows, ignore_index=True)
-                self.valid_data = pd.DataFrame(valid_rows) if valid_rows else pd.DataFrame(columns=df.columns)
-                self.test_data = pd.DataFrame(test_rows) if test_rows else pd.DataFrame(columns=df.columns)
-            else:
-                print("Внимание: timestamp не найден, используется per-user random split")
-                strategy = 'random'
-
-        if strategy == 'random':
-            # Per-user random split с сохранением как минимум одного train события
-            train_rows = []
-            valid_rows = []
-            test_rows = []
-            rng = np.random.RandomState(42)
-            for _, group in df.groupby('userId'):
-                group = group.sample(frac=1.0, random_state=rng).reset_index(drop=True)
-                n = len(group)
-                if n == 1:
-                    train_rows.append(group)
-                    continue
-
-                # Гарантируем минимум одно взаимодействие в train
-                test_size = max(1, int(n * test_ratio))
-                valid_size = max(0, int(n * valid_ratio))
-                if test_size + valid_size >= n:
-                    test_size = 1
-                    valid_size = 0
-
-                test_part = group.iloc[:test_size]
-                valid_part = group.iloc[test_size:test_size + valid_size]
-                train_part = group.iloc[test_size + valid_size:]
-
-                train_rows.append(train_part)
-                if not valid_part.empty:
-                    valid_rows.append(valid_part)
-                if not test_part.empty:
-                    test_rows.append(test_part)
-
-            self.train_data = pd.concat(train_rows, ignore_index=True)
-            self.valid_data = pd.concat(valid_rows, ignore_index=True) if valid_rows else pd.DataFrame(columns=df.columns)
-            self.test_data = pd.concat(test_rows, ignore_index=True) if test_rows else pd.DataFrame(columns=df.columns)
-
-            # Удаляем cold-start взаимодействия в valid/test (только для per-user split)
-            train_users = set(self.train_data['userId'].unique())
-            train_items = set(self.train_data['itemId'].unique())
-            before_valid = len(self.valid_data)
-            before_test = len(self.test_data)
-
-            if not self.valid_data.empty:
-                self.valid_data = self.valid_data[
-                    self.valid_data['userId'].isin(train_users) &
-                    self.valid_data['itemId'].isin(train_items)
-                ].copy()
-            if not self.test_data.empty:
-                self.test_data = self.test_data[
-                    self.test_data['userId'].isin(train_users) &
-                    self.test_data['itemId'].isin(train_items)
-                ].copy()
-
-            if before_valid != len(self.valid_data) or before_test != len(self.test_data):
-                print(f"Удалены cold-start взаимодействия: valid {before_valid}->{len(self.valid_data)}, "
-                      f"test {before_test}->{len(self.test_data)}")
-        
-        print(f"Train: {len(self.train_data)} взаимодействий")
-        print(f"Valid: {len(self.valid_data)} взаимодействий")
-        print(f"Test: {len(self.test_data)} взаимодействий")
-        
         # Сохраняем разделенные данные
         self._save_split_data()
     

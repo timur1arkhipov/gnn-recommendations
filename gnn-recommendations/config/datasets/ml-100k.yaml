@@ -12,12 +12,9 @@ filtering:
   min_user_interactions: 5
   min_item_interactions: 5
 
-# Разделение данных (глобальный 80-10-10 split)
+# Разделение данных (temporal per-user split)
 split:
-  strategy: "random_global"  # Глобальное случайное разбиение
-  train_ratio: 0.8
-  valid_ratio: 0.1
-  test_ratio: 0.1
+  strategy: "temporal"  # Разделение по времени для каждого пользователя
   seed: 42
 
 # Граф
