@@ -27,7 +27,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from src.models import (
-    BPR_MF, LightGCN, GCNII, DGR, SVD_GCN, LayerGCN, OrthogonalBundleGNN
+    LightGCN, NGCF, GAT, UltraGCN, KGTORe, OrthogonalBundleGNN
 )
 from src.data import RecommendationDataset
 from src.training import Trainer
@@ -36,12 +36,11 @@ from src.evaluation import Evaluator
 
 # Регистр моделей
 MODEL_REGISTRY = {
-    'bpr_mf': BPR_MF,
     'lightgcn': LightGCN,
-    'gcnii': GCNII,
-    'dgr': DGR,
-    'svd_gcn': SVD_GCN,
-    'layergcn': LayerGCN,
+    'ngcf': NGCF,
+    'gat': GAT,
+    'ultragcn': UltraGCN,
+    'kgtore': KGTORe,
     'orthogonal_bundle': OrthogonalBundleGNN,
 }
 
@@ -49,7 +48,7 @@ MODEL_REGISTRY = {
 ALL_DATASETS = ['movie_lens', 'book_crossing', 'gowalla']
 
 # Все модели (без дубликатов алиасов)
-ALL_MODELS = ['bpr_mf', 'lightgcn', 'gcnii', 'dgr', 'svd_gcn', 'layergcn', 'orthogonal_bundle']
+ALL_MODELS = ['lightgcn', 'ngcf', 'gat', 'ultragcn', 'kgtore', 'orthogonal_bundle']
 
 
 def load_config(model_name: str, root_dir: Path) -> dict:
@@ -110,10 +109,6 @@ def create_model(
     default_params = {
         'embedding_dim': 64,
     }
-    
-    # n_layers только для GNN моделей (не для BPR-MF)
-    if model_name != 'bpr_mf':
-        default_params['n_layers'] = 3
     
     default_params.update(model_params)
     

@@ -3,22 +3,20 @@
 from .base import BaseRecommender
 from .orthogonal_bundle import OrthogonalBundleGNN, GroupShuffleLayer
 from .baselines import (
-    BPR_MF,
     LightGCN,
-    GCNII,
-    DGR,
-    SVD_GCN,
-    LayerGCN,
+    NGCF,
+    GAT,
+    UltraGCN,
+    KGTORe,
 )
 
 __all__ = [
     'BaseRecommender',
     'OrthogonalBundleGNN',
     'GroupShuffleLayer',
-    'BPR_MF',
     'LightGCN',
-    'GCNII',
-    'DGR',
-    'SVD_GCN',
-    'LayerGCN',
+    'NGCF',
+    'GAT',
+    'UltraGCN',
+    'KGTORe',
 ]

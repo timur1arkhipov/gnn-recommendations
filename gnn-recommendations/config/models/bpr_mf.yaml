@@ -1,9 +1,0 @@
-# Конфигурация для BPR-MF модели
-
-model_name: "bpr_mf"
-
-# Параметры модели
-model:
-  embedding_dim: 64
-  init_scale: 0.01
-

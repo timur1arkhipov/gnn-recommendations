@@ -1,0 +1,15 @@
+# Конфигурация для KGTORe модели
+
+model_name: "kgtore"
+
+# Параметры модели
+model:
+  embedding_dim: 64
+  kg_embedding_dim: 64  # Размерность KG embeddings
+  tree_depth: 3  # Глубина tree structure
+  n_layers: 2  # Количество graph convolution слоев
+  dropout: 0.1  # Dropout для регуляризации
+  use_kg: false  # Использовать explicit KG (false для датасетов без метаданных)
+  n_entities: null  # Количество entities в KG (null если use_kg=false)
+  n_relations: null  # Количество relations в KG (null если use_kg=false)
+  init_scale: 0.01  # Масштаб инициализации
