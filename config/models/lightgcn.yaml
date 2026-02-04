@@ -1,0 +1,10 @@
+# Конфигурация для LightGCN модели
+
+model_name: "lightgcn"
+
+# Параметры модели
+model:
+  embedding_dim: 64
+  n_layers: 3
+  init_scale: 0.1  # Увеличено с 0.01 для лучшей инициализации
+

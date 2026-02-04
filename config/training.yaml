@@ -1,0 +1,56 @@
+# Общие настройки обучения для всех моделей
+
+# Параметры оптимизатора
+learning_rate: 0.001
+weight_decay: 1e-4
+
+# Параметры обучения (облегчённый режим для быстрых тестов)
+batch_size: 512
+epochs: 10
+eval_every: 2  # Валидация каждые N эпох
+
+# Learning rate scheduling
+use_scheduler: false  # Использовать ли scheduler
+warmup_epochs: 0  # Количество эпох для warmup
+max_grad_norm: 1.0  # Gradient clipping для стабильности
+
+# Сэмплирование
+negative_samples: 1  # Количество отрицательных примеров на положительный
+
+# Early stopping
+early_stopping:
+  patience: 20  # Количество эпох без улучшения перед остановкой
+  min_delta: 0.0001  # Минимальное улучшение для сброса patience
+
+# Сохранение
+checkpoint_dir: "results/checkpoints"
+save_best_only: true  # Сохранять только лучшую модель
+
+# Логирование
+log_dir: "results/logs"
+log_every: 2  # Логировать каждые N эпох
+
+# Метрики для валидации
+validation_metrics:
+  - recall@10
+  - recall@20
+  - recall@50
+  - ndcg@10
+  - ndcg@20
+  - ndcg@50
+  - coverage
+
+# Метрика для early stopping
+early_stopping_metric: "recall@10"
+
+# Warm-start embeddings (опционально)
+warm_start:
+  enabled: true
+  apply_to: "orthogonal_bundle"
+  embeddings_path: "results/embeddings/lightgcn_movie_lens.pt"
+
+# Экспорт embeddings после обучения (опционально)
+export_embeddings:
+  enabled: true
+  apply_to: "lightgcn"
+  path: "results/embeddings/lightgcn_movie_lens.pt"

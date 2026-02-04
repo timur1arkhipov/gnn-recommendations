@@ -1,0 +1,12 @@
+# Конфигурация для GAT модели
+
+model_name: "gat"
+
+# Параметры модели
+model:
+  embedding_dim: 64
+  n_layers: 3
+  n_heads: 4  # Количество attention heads
+  dropout: 0.1  # Dropout для регуляризации
+  alpha: 0.2  # Negative slope для LeakyReLU в attention
+  init_scale: 0.01  # Масштаб инициализации
