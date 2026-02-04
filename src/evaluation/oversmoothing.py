@@ -111,22 +111,54 @@ class OversmoothingAnalyzer:
     def compute_variance(self, embeddings: torch.Tensor) -> float:
         """
         Вычисляет дисперсию embeddings по всем измерениям.
-        
+
         Низкая дисперсия означает, что все embeddings сконцентрированы в узкой области.
-        
+
         Args:
             embeddings: тензор embeddings [n_nodes, embedding_dim]
-        
+
         Returns:
             Средняя дисперсия по измерениям
         """
         # Дисперсия по каждому измерению
         variance_per_dim = embeddings.var(dim=0)  # [embedding_dim]
-        
+
         # Средняя дисперсия
         mean_variance = variance_per_dim.mean().item()
-        
+
         return mean_variance
+
+    def compute_norm_retention(
+        self,
+        current_embeddings: torch.Tensor,
+        initial_embeddings: torch.Tensor
+    ) -> float:
+        """
+        Вычисляет Norm Retention (%) - процент сохранения нормы эмбеддингов.
+
+        Norm Retention близкий к 100% означает хорошее сохранение нормы (нет over-smoothing).
+        Norm Retention близкий к 0% означает сильный коллапс норм (over-smoothing).
+
+        Formula: Norm Retention = ||x^(L)|| / ||x^(0)|| × 100%
+
+        Args:
+            current_embeddings: текущие embeddings [n_nodes, embedding_dim]
+            initial_embeddings: начальные embeddings [n_nodes, embedding_dim]
+
+        Returns:
+            Процент сохранения нормы (0-100)
+        """
+        # Вычисляем средние нормы
+        current_norm = torch.norm(current_embeddings, p=2, dim=1).mean().item()
+        initial_norm = torch.norm(initial_embeddings, p=2, dim=1).mean().item()
+
+        # Процент сохранения
+        if initial_norm > 0:
+            norm_retention = (current_norm / initial_norm) * 100.0
+        else:
+            norm_retention = 0.0
+
+        return norm_retention
     
     def compute_node_similarity_distribution(
         self,
@@ -177,36 +209,47 @@ class OversmoothingAnalyzer:
     ) -> Dict[str, Dict[str, float]]:
         """
         Анализирует embeddings по слоям для выявления over-smoothing.
-        
+
         Args:
             layer_embeddings: список тензоров embeddings для каждого слоя
             layer_names: названия слоёв (опционально)
             sample_size: размер сэмпла для вычислений
-        
+
         Returns:
             Словарь с метриками для каждого слоя
         """
         if layer_names is None:
             layer_names = [f'layer_{i}' for i in range(len(layer_embeddings))]
-        
+
         results = {}
-        
-        for layer_name, embeddings in zip(layer_names, layer_embeddings):
+
+        # Начальные эмбеддинги для вычисления norm retention
+        initial_embeddings = layer_embeddings[0].detach().cpu()
+
+        for layer_idx, (layer_name, embeddings) in enumerate(zip(layer_names, layer_embeddings)):
             # Переводим на CPU для вычислений
             embeddings = embeddings.detach().cpu()
-            
+
             layer_metrics = {
                 'mcs': self.compute_mcs(embeddings, sample_size=sample_size),
                 'mad': self.compute_mad(embeddings, sample_size=sample_size),
                 'variance': self.compute_variance(embeddings),
             }
-            
+
+            # Добавляем norm retention (процент сохранения нормы относительно начального слоя)
+            if layer_idx == 0:
+                layer_metrics['norm_retention'] = 100.0  # Начальный слой всегда 100%
+            else:
+                layer_metrics['norm_retention'] = self.compute_norm_retention(
+                    embeddings, initial_embeddings
+                )
+
             # Добавляем статистику распределения
             sim_stats = self.compute_node_similarity_distribution(embeddings, sample_size=sample_size)
             layer_metrics.update({f'sim_{k}': v for k, v in sim_stats.items()})
-            
+
             results[layer_name] = layer_metrics
-        
+
         return results
     
     def analyze_model(
@@ -278,6 +321,84 @@ class OversmoothingAnalyzer:
         
         return results
     
+    def get_layer_metrics(
+        self,
+        model: torch.nn.Module,
+        adj_matrix: Optional[torch.Tensor] = None,
+        edge_index: Optional[torch.Tensor] = None,
+        layer_idx: int = 4,
+        sample_size: int = 1000
+    ) -> Dict[str, float]:
+        """
+        Получает метрики over-smoothing для конкретного слоя модели.
+
+        Args:
+            model: GNN модель
+            adj_matrix: матрица смежности (если модель использует adj_matrix)
+            edge_index: список рёбер (если модель использует edge_index)
+            layer_idx: индекс слоя (по умолчанию 4)
+            sample_size: размер сэмпла для вычислений
+
+        Returns:
+            Словарь с метриками: norm_retention, mad, cosine_similarity, variance
+        """
+        model.eval()
+
+        try:
+            with torch.no_grad():
+                # Получаем embeddings по слоям
+                if hasattr(model, 'get_layer_embeddings'):
+                    if adj_matrix is not None:
+                        layer_embeddings = model.get_layer_embeddings(adj_matrix=adj_matrix)
+                    elif edge_index is not None:
+                        layer_embeddings = model.get_layer_embeddings(edge_index=edge_index)
+                    else:
+                        raise ValueError("Необходимо передать либо adj_matrix, либо edge_index")
+                else:
+                    raise AttributeError(
+                        f"Модель {model.__class__.__name__} не имеет метода get_layer_embeddings()"
+                    )
+
+            # Проверяем, что запрошенный слой существует
+            if layer_idx >= len(layer_embeddings):
+                print(f"Запрошенный слой {layer_idx} не существует (всего {len(layer_embeddings)} слоёв)")
+                layer_idx = len(layer_embeddings) - 1
+                print(f"Используем последний слой: {layer_idx}")
+
+            # Анализируем все слои
+            results = self.analyze_layer_embeddings(
+                layer_embeddings,
+                sample_size=sample_size
+            )
+
+            # Берём метрики для запрошенного слоя
+            layer_key = f'layer_{layer_idx}'
+            if layer_key in results:
+                metrics = results[layer_key]
+                return {
+                    'norm_retention': metrics.get('norm_retention', float('nan')),
+                    'mad': metrics.get('mad', float('nan')),
+                    'cosine_similarity': metrics.get('mcs', float('nan')),
+                    'variance': metrics.get('variance', float('nan'))
+                }
+            else:
+                print(f"Слой {layer_key} не найден в результатах")
+                return {
+                    'norm_retention': float('nan'),
+                    'mad': float('nan'),
+                    'cosine_similarity': float('nan'),
+                    'variance': float('nan')
+                }
+
+        except Exception as e:
+            print(f"Ошибка при вычислении метрик для слоя {layer_idx}: {e}")
+            return {
+                'norm_retention': float('nan'),
+                'mad': float('nan'),
+                'cosine_similarity': float('nan'),
+                'variance': float('nan')
+            }
+
     def get_final_layer_mcs(
         self,
         model: torch.nn.Module,
@@ -286,12 +407,12 @@ class OversmoothingAnalyzer:
     ) -> float:
         """
         Получает MCS для финального слоя модели (для таблицы результатов).
-        
+
         Args:
             model: GNN модель
             adj_matrix: матрица смежности
             sample_size: размер сэмпла
-        
+
         Returns:
             MCS значение для последнего слоя
         """
@@ -307,32 +428,31 @@ class OversmoothingAnalyzer:
 
 def compute_oversmoothing_metrics(
     model: torch.nn.Module,
-    adj_matrix: torch.Tensor,
+    adj_matrix: Optional[torch.Tensor] = None,
+    edge_index: Optional[torch.Tensor] = None,
+    layer_idx: int = 4,
     sample_size: int = 1000
 ) -> Dict[str, float]:
     """
     Удобная функция для быстрого вычисления over-smoothing метрик.
-    
+
     Args:
         model: GNN модель
-        adj_matrix: матрица смежности
+        adj_matrix: матрица смежности (опционально)
+        edge_index: список рёбер (опционально)
+        layer_idx: индекс слоя для анализа (по умолчанию 4)
         sample_size: размер сэмпла
-    
+
     Returns:
-        Словарь с метриками финального слоя
+        Словарь с метриками: norm_retention, mad, cosine_similarity, variance
     """
     analyzer = OversmoothingAnalyzer()
-    
-    try:
-        results = analyzer.analyze_model(model, adj_matrix, sample_size)
-        # Возвращаем метрики последнего слоя
-        last_layer = list(results.keys())[-1]
-        return results[last_layer]
-    except Exception as e:
-        print(f"Ошибка при вычислении метрик: {e}")
-        return {
-            'mcs': float('nan'),
-            'mad': float('nan'),
-            'variance': float('nan')
-        }
+
+    return analyzer.get_layer_metrics(
+        model=model,
+        adj_matrix=adj_matrix,
+        edge_index=edge_index,
+        layer_idx=layer_idx,
+        sample_size=sample_size
+    )
 
