@@ -1,13 +1,9 @@
-# Настройки датасета Yahoo (Music/Movies)
-
 name: "yahoo"
 data_path: "data/raw/yahoo"
 
 # Бинаризация (преобразование в implicit feedback)
 binarize:
   rating_threshold: 3.0  # Рейтинг >= 3 считается положительным
-  # Для Yahoo Music: рейтинги обычно 1-5 или 1-100
-  # Для Yahoo Movies: рейтинги обычно 1-5
 
 # Фильтрация
 filtering:

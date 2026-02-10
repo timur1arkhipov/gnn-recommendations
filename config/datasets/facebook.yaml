@@ -1,4 +1,3 @@
-# Настройки датасета Facebook
 
 name: "facebook"
 data_path: "data/raw"
@@ -7,17 +6,14 @@ data_path: "data/raw"
 binarize:
   rating_threshold: 0.0  # Не применяем фильтрацию по рейтингу для Facebook
 
-# Фильтрация
 filtering:
   min_user_interactions: 10
   min_item_interactions: 10
 
-# Разделение данных (temporal per-user split)
 split:
-  strategy: "temporal"  # Разделение по времени для каждого пользователя
+  strategy: "temporal"
   seed: 42
 
-# Граф
 graph:
   normalize: true
   self_loop: false

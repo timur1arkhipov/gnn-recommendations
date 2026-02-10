@@ -78,3 +78,6 @@ Thumbs.db
 
 # excess md files
 problems.md
+
+results/*
+data/*
