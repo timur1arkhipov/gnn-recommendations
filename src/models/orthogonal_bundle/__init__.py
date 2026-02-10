@@ -1,4 +1,4 @@
-"""Orthogonal Bundle GNN model for recommendations."""
+"""Модель Orthogonal Bundle GNN для рекомендательных систем."""
 
 from .model import OrthogonalBundleGNN
 from .group_shuffle_layer import GroupShuffleLayer

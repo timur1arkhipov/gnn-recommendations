@@ -1,7 +1,7 @@
 """
-GroupShuffleLayer - local transformations within fiber space.
+GroupShuffleLayer - локальные преобразования внутри пространства волокон.
 
-This is the Group and Shuffle mechanism for orthogonal transformations.
+Это механизм Group и Shuffle для ортогональных преобразований.
 """
 
 import torch
@@ -11,16 +11,16 @@ from typing import Optional, Tuple
 
 class GroupShuffleLayer(nn.Module):
     """
-    Group & Shuffle Layer for local transformations within fiber space.
-    
-    Components:
-    1. Group (orthogonal transformation) - block-diagonal orthogonal matrix
-    2. Shuffle - feature permutation
-    
-    This layer applies orthogonal transformations to preserve norm while
-    allowing expressive feature mixing.
+    Слой Group & Shuffle для локальных преобразований внутри пространства волокон.
+
+    Компоненты:
+    1. Group (ортогональное преобразование) - блочно-диагональная ортогональная матрица
+    2. Shuffle - перестановка признаков
+
+    Этот слой применяет ортогональные преобразования для сохранения нормы, при этом
+    позволяя выразительное смешивание признаков.
     """
-    
+
     def __init__(
         self,
         dim: int,
@@ -28,142 +28,142 @@ class GroupShuffleLayer(nn.Module):
         init_scale: float = 0.01
     ):
         """
-        Initialize GroupShuffleLayer.
-        
+        Инициализирует GroupShuffleLayer.
+
         Args:
-            dim: feature dimension (embedding_dim)
-            block_size: size of blocks for orthogonal matrix
-            init_scale: initialization scale for parameters
+            dim: размерность признаков (embedding_dim)
+            block_size: размер блоков для ортогональной матрицы
+            init_scale: масштаб инициализации для параметров
         """
         super().__init__()
         
         self.dim = dim
         self.block_size = block_size
-        
-        # Check that dim is divisible by block_size
+
+        # Проверяем, что dim делится на block_size
         if dim % block_size != 0:
             raise ValueError(
-                f"dim ({dim}) must be divisible by block_size ({block_size})"
+                f"dim ({dim}) должна делиться на block_size ({block_size})"
             )
-        
+
         self.n_blocks = dim // block_size
-        
-        # Parameters for skew-symmetric matrices
-        # Each block is built from skew-symmetric matrix via exponential map
+
+        # Параметры для кососимметричных матриц
+        # Каждый блок строится из кососимметричной матрицы через экспоненциальное отображение
         self.skew_params = nn.ParameterList([
             nn.Parameter(torch.randn(block_size, block_size) * init_scale)
             for _ in range(self.n_blocks)
         ])
-        
-        # Shuffle permutation - fixed permutation
-        # Register as buffer (not a trainable parameter)
+
+        # Перестановка для Shuffle - фиксированная перестановка
+        # Регистрируем как буфер (не обучаемый параметр)
         self.register_buffer('perm', self._create_shuffle_permutation())
-    
+
     def _create_shuffle_permutation(self) -> torch.Tensor:
         """
-        Create permutation for shuffle.
-        
+        Создаёт перестановку для shuffle.
+
         Returns:
-            Tensor with permutation indices [dim]
+            Тензор с индексами перестановки [dim]
         """
-        # Create random permutation
+        # Создаём случайную перестановку
         perm = torch.randperm(self.dim)
         return perm
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass through the layer.
-        
-        Process:
-        1. Group: orthogonal transformation (block-diagonal matrix)
-        2. Shuffle: feature permutation
-        
+        Прямой проход через слой.
+
+        Процесс:
+        1. Group: ортогональное преобразование (блочно-диагональная матрица)
+        2. Shuffle: перестановка признаков
+
         Args:
-            x: node features [N, dim] or [batch, dim]
-        
+            x: признаки вершин [N, dim] или [batch, dim]
+
         Returns:
-            Transformed features [N, dim]
+            Преобразованные признаки [N, dim]
         """
-        # 1. Build orthogonal matrix (Group)
+        # 1. Строим ортогональную матрицу (Group)
         W_orth = self._build_orthogonal_matrix()  # [dim, dim]
-        
-        # 2. Apply orthogonal transformation
+
+        # 2. Применяем ортогональное преобразование
         x_transformed = x @ W_orth  # [N, dim]
-        
-        # 3. Shuffle - feature permutation
+
+        # 3. Shuffle - перестановка признаков
         x_shuffled = x_transformed[:, self.perm]  # [N, dim]
-        
+
         return x_shuffled
     
     def _build_orthogonal_matrix(self) -> torch.Tensor:
         """
-        Build block-diagonal orthogonal matrix.
-        
-        Method:
-        1. For each block, create skew-symmetric matrix A_skew
-        2. Apply exponential map: exp(A_skew) → orthogonal matrix
-        3. Assemble block-diagonal matrix
-        
+        Строит блочно-диагональную ортогональную матрицу.
+
+        Метод:
+        1. Для каждого блока создаём кососимметричную матрицу A_skew
+        2. Применяем экспоненциальное отображение: exp(A_skew) → ортогональная матрица
+        3. Собираем блочно-диагональную матрицу
+
         Returns:
-            Orthogonal matrix [dim, dim]
+            Ортогональная матрица [dim, dim]
         """
         blocks = []
-        
+
         for param in self.skew_params:
-            # Make skew-symmetric: A_skew = A - A^T
+            # Делаем кососимметричной: A_skew = A - A^T
             A_skew = param - param.T  # [block_size, block_size]
-            
-            # Exponential map: exp(A_skew) → orthogonal matrix
-            # This guarantees orthogonality (Lie group SO(n))
+
+            # Экспоненциальное отображение: exp(A_skew) → ортогональная матрица
+            # Это гарантирует ортогональность (группа Ли SO(n))
             try:
                 block_orth = torch.matrix_exp(A_skew)  # [block_size, block_size]
             except RuntimeError:
-                # If matrix_exp doesn't work (older PyTorch versions), use alternative
+                # Если matrix_exp не работает (старые версии PyTorch), используем альтернативу
                 block_orth = self._matrix_exp_alternative(A_skew)
-            
+
             blocks.append(block_orth)
-        
-        # Assemble block-diagonal matrix
+
+        # Собираем блочно-диагональную матрицу
         W_orth = torch.block_diag(*blocks)  # [dim, dim]
-        
+
         return W_orth
     
     def _matrix_exp_alternative(self, A: torch.Tensor, n_terms: int = 10) -> torch.Tensor:
         """
-        Alternative implementation of matrix exponential via Taylor series.
-        
-        Used if torch.matrix_exp is unavailable.
-        
+        Альтернативная реализация матричной экспоненты через ряд Тейлора.
+
+        Используется, если torch.matrix_exp недоступна.
+
         Args:
-            A: matrix [block_size, block_size]
-            n_terms: number of Taylor series terms
-        
+            A: матрица [block_size, block_size]
+            n_terms: количество членов ряда Тейлора
+
         Returns:
             exp(A) [block_size, block_size]
         """
-        # Taylor series: exp(A) = I + A + A^2/2! + A^3/3! + ...
+        # Ряд Тейлора: exp(A) = I + A + A^2/2! + A^3/3! + ...
         result = torch.eye(A.size(0), device=A.device, dtype=A.dtype)
         A_power = torch.eye(A.size(0), device=A.device, dtype=A.dtype)
         factorial = 1.0
-        
+
         for i in range(1, n_terms + 1):
             A_power = A_power @ A
             factorial *= i
             result = result + A_power / factorial
-        
+
         return result
-    
+
     def get_orthogonality_error(self) -> torch.Tensor:
         """
-        Compute orthogonality error of the matrix.
-        
-        Useful for monitoring during training.
-        
+        Вычисляет ошибку ортогональности матрицы.
+
+        Полезно для мониторинга во время обучения.
+
         Returns:
-            Orthogonality error (should be close to 0)
+            Ошибка ортогональности (должна быть близка к 0)
         """
         W_orth = self._build_orthogonal_matrix()
-        # W^T @ W should be close to Identity
+        # W^T @ W должна быть близка к единичной матрице
         identity = torch.eye(self.dim, device=W_orth.device, dtype=W_orth.dtype)
         WtW = W_orth.T @ W_orth
         error = torch.norm(WtW - identity, p='fro')
@@ -171,7 +171,7 @@ class GroupShuffleLayer(nn.Module):
 
     def get_orthogonality_metrics(self) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute orthogonality metrics for monitoring.
+        Вычисляет метрики ортогональности для мониторинга.
 
         Returns:
             Tuple (frobenius_error, max_deviation)
@@ -184,7 +184,7 @@ class GroupShuffleLayer(nn.Module):
         return fro_error, max_deviation
     
     def reset_parameters(self):
-        """Reset parameters to initial values."""
+        """Сбрасывает параметры к начальным значениям."""
         for param in self.skew_params:
             nn.init.normal_(param, mean=0.0, std=0.01)
 

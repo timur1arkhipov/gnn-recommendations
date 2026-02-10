@@ -8,21 +8,21 @@ from typing import Tuple
 
 class BundleConnectionLayer(nn.Module):
     """
-    Bundle Connection Layer: computes orthogonal connection matrices W_{ij}
-    for parallel transport along graph edges.
-    
-    Key idea:
-    - Each edge (i,j) has its own connection matrix W_{ij}
-    - W_{ij} is orthogonal → preserves norm during transport
-    - Built through Group & Shuffle mechanism
+    Bundle Connection Layer: вычисляет ортогональные матрицы связи W_{ij}
+    для параллельного переноса вдоль рёбер графа.
+
+    Ключевая идея:
+    - Каждое ребро (i,j) имеет свою матрицу связи W_{ij}
+    - W_{ij} ортогональна → сохраняет норму при переносе
+    - Построена через механизм Group & Shuffle
     """
-    
+
     def __init__(self, embedding_dim, block_size, n_blocks=None):
         """
         Args:
-            embedding_dim: dimension of embeddings
-            block_size: size of blocks for Group mechanism
-            n_blocks: number of blocks (if None, computed automatically)
+            embedding_dim: размерность эмбеддингов
+            block_size: размер блоков для механизма Group
+            n_blocks: количество блоков (если None, вычисляется автоматически)
         """
         super().__init__()
         
@@ -30,59 +30,59 @@ class BundleConnectionLayer(nn.Module):
         self.block_size = block_size
         self.n_blocks = n_blocks or (embedding_dim // block_size)
         
-        # Parameters for skew-symmetric matrices (for each block)
+        # Параметры для кососимметричных матриц (для каждого блока)
         self.skew_params = nn.ParameterList([
             nn.Parameter(torch.randn(block_size, block_size) * 0.01)
             for _ in range(self.n_blocks)
         ])
-        
-        # Shuffle permutation (fixed for this layer)
+
+        # Перестановка для Shuffle (фиксированная для этого слоя)
         self.register_buffer('shuffle_perm', self._create_shuffle_permutation())
-    
+
     def _create_shuffle_permutation(self):
-        """Create shuffle permutation"""
+        """Создаёт перестановку для shuffle"""
         return torch.randperm(self.embedding_dim)
     
     def forward(self, edge_index=None):
         """
-        Build orthogonal connection matrix
-        
+        Строит ортогональную матрицу связи
+
         Args:
-            edge_index: [2, num_edges] - optional, for edge-specific matrices
-        
+            edge_index: [2, num_edges] - опционально, для специфичных рёбрам матриц
+
         Returns:
-            W_connection: [embedding_dim, embedding_dim] orthogonal matrix
+            W_connection: [embedding_dim, embedding_dim] ортогональная матрица
         """
-        # Build block-diagonal orthogonal matrix
+        # Строим блочно-диагональную ортогональную матрицу
         blocks = []
-        
+
         for skew_param in self.skew_params:
-            # Make skew-symmetric: A = A - A^T
+            # Делаем кососимметричной: A = A - A^T
             A_skew = skew_param - skew_param.transpose(-2, -1)
-            
-            # Exponential map: W = exp(A_skew)
-            # This guarantees orthogonality!
+
+            # Экспоненциальное отображение: W = exp(A_skew)
+            # Это гарантирует ортогональность!
             W_block = torch.matrix_exp(A_skew)
-            
+
             blocks.append(W_block)
-        
-        # Assemble block-diagonal matrix
+
+        # Собираем блочно-диагональную матрицу
         W_orth = torch.block_diag(*blocks)
-        
-        # Apply shuffle permutation
+
+        # Применяем перестановку shuffle
         W_shuffled = W_orth[:, self.shuffle_perm]
-        
+
         return W_shuffled
     
     def get_connection_matrix_for_edge(self, src_node, dst_node):
         """
-        Get connection matrix for a specific edge
-        (currently using one matrix for all edges, can be extended)
-        
+        Получает матрицу связи для конкретного ребра
+        (сейчас используется одна матрица для всех рёбер, может быть расширено)
+
         Args:
-            src_node: source node index
-            dst_node: destination node index
-        
+            src_node: индекс исходной вершины
+            dst_node: индекс целевой вершины
+
         Returns:
             W: [embedding_dim, embedding_dim]
         """
@@ -90,7 +90,7 @@ class BundleConnectionLayer(nn.Module):
 
     def get_orthogonality_metrics(self) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute orthogonality metrics for the connection matrix.
+        Вычисляет метрики ортогональности для матрицы связи.
 
         Returns:
             Tuple (frobenius_error, max_deviation)
@@ -105,39 +105,39 @@ class BundleConnectionLayer(nn.Module):
 
 class EdgeSpecificBundleConnection(nn.Module):
     """
-    Extended version: different connection matrices for different edge types
-    (e.g., user-item vs item-user)
+    Расширенная версия: разные матрицы связи для разных типов рёбер
+    (например, user-item vs item-user)
     """
-    
+
     def __init__(self, embedding_dim, block_size, n_edge_types=2):
         super().__init__()
-        
+
         self.embedding_dim = embedding_dim
-        
-        # Create separate connection layers for each edge type
+
+        # Создаём отдельные слои связи для каждого типа рёбер
         self.connection_layers = nn.ModuleList([
             BundleConnectionLayer(embedding_dim, block_size)
             for _ in range(n_edge_types)
         ])
-    
+
     def forward(self, edge_index, edge_type):
         """
         Args:
             edge_index: [2, num_edges]
-            edge_type: [num_edges] - type of each edge (0 or 1)
-        
+            edge_type: [num_edges] - тип каждого ребра (0 или 1)
+
         Returns:
             W_connections: [num_edges, embedding_dim, embedding_dim]
         """
         num_edges = edge_index.size(1)
         device = edge_index.device
-        
-        # Get connection matrices for each type
+
+        # Получаем матрицы связи для каждого типа
         W_type_0 = self.connection_layers[0]()
         W_type_1 = self.connection_layers[1]()
-        
-        # Assemble for each edge
-        W_connections = torch.zeros(num_edges, self.embedding_dim, self.embedding_dim, 
+
+        # Собираем для каждого ребра
+        W_connections = torch.zeros(num_edges, self.embedding_dim, self.embedding_dim,
                                      device=device)
         
         mask_0 = (edge_type == 0)

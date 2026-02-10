@@ -1,18 +1,18 @@
 """
-OrthogonalBundleGNN - Orthogonal Vector Bundle Graph Neural Network.
+OrthogonalBundleGNN - Ортогональная векторная расслоенная графовая нейронная сеть.
 
-Implements the proposed method combining:
-1. Bundle Structure: Each node has its own fiber space (local feature space)
-2. Orthogonal Connection Matrices W_{ij}: Transport embeddings between fiber spaces
-3. Parallel Transport: Move representations along edges preserving geometric structure
-4. Local Transformations: Group & Shuffle mechanism for expressive power
-5. Over-smoothing Prevention: Orthogonality ensures ||W_{ij} · x|| = ||x||
+Реализует предложенный метод, объединяющий:
+1. Структура расслоения: Каждая вершина имеет своё пространство волокон (локальное пространство признаков)
+2. Ортогональные матрицы связи W_{ij}: Переносят эмбеддинги между пространствами волокон
+3. Параллельный перенос: Перемещает представления вдоль рёбер, сохраняя геометрическую структуру
+4. Локальные преобразования: Механизм Group & Shuffle для выразительности
+5. Предотвращение over-smoothing: Ортогональность обеспечивает ||W_{ij} · x|| = ||x||
 
-Architecture per layer:
-    1. Parallel Transport: Transfer embeddings along edges via W_{ij}
-    2. Local Transformation: Orthogonal transformation within fiber space
-    3. Residual Connection: Stabilize training
-    4. Layer Aggregation: Weighted combination of all layers
+Архитектура на каждом слое:
+    1. Параллельный перенос: Передача эмбеддингов вдоль рёбер через W_{ij}
+    2. Локальное преобразование: Ортогональное преобразование внутри пространства волокон
+    3. Residual-связь: Стабилизация обучения
+    4. Агрегация слоёв: Взвешенная комбинация всех слоёв
 """
 
 import torch
@@ -28,26 +28,26 @@ from .group_shuffle_layer import GroupShuffleLayer
 
 class OrthogonalBundleGNN(BaseRecommender):
     """
-    Orthogonal Vector Bundle GNN for Recommendations
-    
-    Proposed Method:
-    - Bundle Structure: Each node (user/item) has its own fiber space
-    - Connection Matrices W_{ij}: Orthogonal transformations for parallel transport
-    - Group & Shuffle: Orthogonal parametrization ensuring ||W_{ij} · x|| = ||x||
-    - Over-smoothing Prevention: Orthogonality prevents representation collapse
-    
-    Architecture (L layers):
-        For each layer l:
-            1. Parallel Transport: x^(l) transported along edges via W_{ij}
-            2. Local Transformation: Orthogonal Group & Shuffle within fiber space
-            3. Residual Connection: x^(l+1) = (1-α)·transformed + α·x^(0)
-        
-        Final: Weighted aggregation of all layer embeddings
-    
-    Key Properties:
-    - Norm preservation: ||W_{ij} · x|| = ||x||
-    - Prevents over-smoothing even with deep layers
-    - Maintains expressiveness through local transformations
+    Ортогональная векторная расслоенная GNN для рекомендательных систем
+
+    Предложенный метод:
+    - Структура расслоения: Каждая вершина (пользователь/товар) имеет своё пространство волокон
+    - Матрицы связи W_{ij}: Ортогональные преобразования для параллельного переноса
+    - Group & Shuffle: Ортогональная параметризация, обеспечивающая ||W_{ij} · x|| = ||x||
+    - Предотвращение over-smoothing: Ортогональность предотвращает коллапс представлений
+
+    Архитектура (L слоёв):
+        Для каждого слоя l:
+            1. Параллельный перенос: x^(l) переносится вдоль рёбер через W_{ij}
+            2. Локальное преобразование: Ортогональный Group & Shuffle внутри пространства волокон
+            3. Residual-связь: x^(l+1) = (1-α)·transformed + α·x^(0)
+
+        Финал: Взвешенная агрегация всех слоёв
+
+    Ключевые свойства:
+    - Сохранение нормы: ||W_{ij} · x|| = ||x||
+    - Предотвращает over-smoothing даже с глубокими слоями
+    - Сохраняет выразительность через локальные преобразования
     """
     
     def __init__(
@@ -64,19 +64,19 @@ class OrthogonalBundleGNN(BaseRecommender):
         use_edge_index: bool = False
     ):
         """
-        Initialize OrthogonalBundleGNN.
-        
+        Инициализирует OrthogonalBundleGNN.
+
         Args:
-            n_users: number of users
-            n_items: number of items
-            embedding_dim: embedding dimension (must be divisible by block_size)
-            n_layers: number of layers (L in paper)
-            block_size: block size for orthogonal matrices
-            residual_alpha: α in residual connection (0.0 = no residual, 1.0 = only initial)
-            dropout: dropout probability
-            init_scale: initialization scale for parameters
-            use_parallel_transport: whether to use parallel transport with W_{ij}
-            use_edge_index: whether to use edge_index format (True) or adj_matrix (False)
+            n_users: количество пользователей
+            n_items: количество товаров
+            embedding_dim: размерность эмбеддинга (должна делиться на block_size)
+            n_layers: количество слоёв (L в статье)
+            block_size: размер блока для ортогональных матриц
+            residual_alpha: α в residual-связи (0.0 = нет residual, 1.0 = только начальные)
+            dropout: вероятность dropout
+            init_scale: масштаб инициализации для параметров
+            use_parallel_transport: использовать ли параллельный перенос с W_{ij}
+            use_edge_index: использовать ли формат edge_index (True) или adj_matrix (False)
         """
         super().__init__(n_users, n_items, embedding_dim)
         
@@ -91,30 +91,30 @@ class OrthogonalBundleGNN(BaseRecommender):
         self.dropout = dropout
         self.use_parallel_transport = use_parallel_transport
         self.use_edge_index = use_edge_index
-        
-        # 1. BASE EMBEDDINGS - Fiber spaces for each node
+
+        # 1. БАЗОВЫЕ ЭМБЕДДИНГИ - Пространства волокон для каждой вершины
         self.user_embedding = nn.Embedding(n_users, embedding_dim)
         self.item_embedding = nn.Embedding(n_items, embedding_dim)
         nn.init.normal_(self.user_embedding.weight, std=0.01)
         nn.init.normal_(self.item_embedding.weight, std=0.01)
-        
-        # 2. CONNECTION MATRICES W_{ij} - Orthogonal transformations for parallel transport
+
+        # 2. МАТРИЦЫ СВЯЗИ W_{ij} - Ортогональные преобразования для параллельного переноса
         if use_parallel_transport:
             self.connection_layers = nn.ModuleList([
                 BundleConnectionLayer(embedding_dim, block_size)
                 for _ in range(n_layers)
             ])
-        
-        # 3. LOCAL TRANSFORMATION LAYERS - Group & Shuffle within fiber spaces
+
+        # 3. СЛОИ ЛОКАЛЬНЫХ ПРЕОБРАЗОВАНИЙ - Group & Shuffle внутри пространств волокон
         self.local_transform_layers = nn.ModuleList([
             GroupShuffleLayer(embedding_dim, block_size, init_scale)
             for _ in range(n_layers)
         ])
-        
+
         # 4. DROPOUT
         self.dropout_layer = nn.Dropout(dropout) if dropout > 0 else None
-        
-        # 5. LAYER AGGREGATION WEIGHTS (learnable)
+
+        # 5. ВЕСА АГРЕГАЦИИ СЛОЁВ (обучаемые)
         self.layer_weights = nn.Parameter(torch.ones(n_layers + 1))
     
     def forward(
@@ -123,102 +123,102 @@ class OrthogonalBundleGNN(BaseRecommender):
         edge_index: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Forward pass through Orthogonal Bundle GNN
-        
-        Implements the proposed architecture:
-        For each layer l:
-            1. Parallel Transport: x transported along edges via W_{ij}
-            2. Local Transformation: Group & Shuffle within fiber space
-            3. Residual Connection: combine with initial embeddings
-        
+        Прямой проход через Orthogonal Bundle GNN
+
+        Реализует предложенную архитектуру:
+        Для каждого слоя l:
+            1. Параллельный перенос: x переносится вдоль рёбер через W_{ij}
+            2. Локальное преобразование: Group & Shuffle внутри пространства волокон
+            3. Residual-связь: комбинируется с начальными эмбеддингами
+
         Args:
-            adj_matrix: normalized adjacency matrix [N, N] (if not using edge_index)
-            edge_index: edge list [2, num_edges] (if not using adj_matrix)
-        
+            adj_matrix: нормализованная матрица смежности [N, N] (если не используется edge_index)
+            edge_index: список рёбер [2, num_edges] (если не используется adj_matrix)
+
         Returns:
-            Tuple of (user_embeddings, item_embeddings)
+            Кортеж из (user_embeddings, item_embeddings)
         """
-        # Check input format
+        # Проверяем формат входных данных
         if self.use_edge_index:
             if edge_index is None:
-                raise ValueError("edge_index must be provided when use_edge_index=True")
+                raise ValueError("edge_index должен быть передан при use_edge_index=True")
         else:
             if adj_matrix is None:
-                raise ValueError("adj_matrix must be provided when use_edge_index=False")
-        
-        # Initial embeddings (fiber spaces at each node)
+                raise ValueError("adj_matrix должна быть передана при use_edge_index=False")
+
+        # Начальные эмбеддинги (пространства волокон в каждой вершине)
         x_init = torch.cat([
             self.user_embedding.weight,  # [n_users, embedding_dim]
             self.item_embedding.weight   # [n_items, embedding_dim]
         ], dim=0)  # [N, embedding_dim], N = n_users + n_items
-        
+
         x = x_init
         all_layer_embeddings = [x]
-        
-        # Pass through L layers
+
+        # Проходим через L слоёв
         for layer_idx in range(self.n_layers):
             if self.use_parallel_transport:
-                # Get connection matrix W_{ij} for this layer
+                # Получаем матрицу связи W_{ij} для этого слоя
                 W_connection = self.connection_layers[layer_idx]()
-                
+
                 if self.use_edge_index:
-                    # STEP 1: PARALLEL TRANSPORT via edge_index
-                    # Transport embeddings along edges: x_j = Σ_{i: (i,j)∈E} W_{ij} · x_i
+                    # ШАГ 1: ПАРАЛЛЕЛЬНЫЙ ПЕРЕНОС через edge_index
+                    # Переносим эмбеддинги вдоль рёбер: x_j = Σ_{i: (i,j)∈E} W_{ij} · x_i
                     x_transported = parallel_transport_along_edges(x, edge_index, W_connection)
                 else:
-                    # STEP 1: PARALLEL TRANSPORT via adjacency matrix
-                    # First: graph convolution (message passing)
+                    # ШАГ 1: ПАРАЛЛЕЛЬНЫЙ ПЕРЕНОС через матрицу смежности
+                    # Сначала: graph convolution (передача сообщений)
                     if adj_matrix.is_sparse:
                         x_conv = torch.sparse.mm(adj_matrix, x)
                     else:
                         x_conv = torch.mm(adj_matrix, x)
-                    # Then: apply connection matrix W_{ij}
+                    # Затем: применяем матрицу связи W_{ij}
                     x_transported = x_conv @ W_connection
             else:
-                # No parallel transport, just graph convolution
+                # Без параллельного переноса, просто graph convolution
                 if self.use_edge_index:
-                    # Simulate graph convolution with edge_index
+                    # Имитируем graph convolution через edge_index
                     x_transported = self._graph_conv_edge_index(x, edge_index)
                 else:
                     if adj_matrix.is_sparse:
                         x_transported = torch.sparse.mm(adj_matrix, x)
                     else:
                         x_transported = torch.mm(adj_matrix, x)
-            
-            # STEP 2: LOCAL TRANSFORMATION (Group & Shuffle within fiber space)
+
+            # ШАГ 2: ЛОКАЛЬНОЕ ПРЕОБРАЗОВАНИЕ (Group & Shuffle внутри пространства волокон)
             x_transformed = self.local_transform_layers[layer_idx](x_transported)
-            
-            # STEP 3: RESIDUAL CONNECTION
+
+            # ШАГ 3: RESIDUAL-СВЯЗЬ
             # x^(l+1) = (1-α)·transformed + α·x^(0)
-            # This prevents over-smoothing by maintaining initial information
+            # Это предотвращает over-smoothing, сохраняя начальную информацию
             x = (1 - self.residual_alpha) * x_transformed + \
                 self.residual_alpha * x_init
-            
-            # STEP 4: DROPOUT
+
+            # ШАГ 4: DROPOUT
             if self.dropout_layer is not None:
                 x = self.dropout_layer(x)
-            
+
             all_layer_embeddings.append(x)
-        
-        # LAYER AGGREGATION: Weighted combination of all layers
+
+        # АГРЕГАЦИЯ СЛОЁВ: Взвешенная комбинация всех слоёв
         layer_weights_normalized = F.softmax(self.layer_weights, dim=0)
         x_final = sum([
             w * emb for w, emb in zip(layer_weights_normalized, all_layer_embeddings)
         ])
-        
-        # Split back into users and items
+
+        # Разделяем обратно на пользователей и товары
         user_embeddings = x_final[:self.n_users]
         item_embeddings = x_final[self.n_users:]
         
         return user_embeddings, item_embeddings
     
     def _graph_conv_edge_index(self, x, edge_index):
-        """Simple graph convolution using edge_index (fallback when no parallel transport)"""
+        """Простая graph convolution через edge_index (запасной вариант без параллельного переноса)"""
         src, dst = edge_index
         x_aggregated = torch.zeros_like(x)
         x_aggregated.index_add_(0, dst, x[src])
         return x_aggregated
-    
+
     def predict(
         self,
         users: torch.Tensor,
@@ -227,7 +227,7 @@ class OrthogonalBundleGNN(BaseRecommender):
         edge_index: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
-        Predict scores for user-item pairs.
+        Предсказывает оценки для пар пользователь-товар.
         """
         user_emb, item_emb = self.get_all_embeddings(adj_matrix, edge_index)
         user_emb_selected = user_emb[users]
@@ -240,17 +240,17 @@ class OrthogonalBundleGNN(BaseRecommender):
         adj_matrix: Optional[torch.Tensor] = None,
         edge_index: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Get all embeddings for users and items."""
+        """Получает все эмбеддинги для пользователей и товаров."""
         return self.forward(adj_matrix, edge_index)
-    
+
     def get_orthogonality_errors(self) -> torch.Tensor:
         """
-        Get orthogonality errors for all layers.
-        
-        Useful for monitoring during training.
-        
+        Получает ошибки ортогональности для всех слоёв.
+
+        Полезно для мониторинга во время обучения.
+
         Returns:
-            Tensor with orthogonality errors [n_layers]
+            Тензор с ошибками ортогональности [n_layers]
         """
         errors = []
         for layer in self.local_transform_layers:
@@ -260,10 +260,10 @@ class OrthogonalBundleGNN(BaseRecommender):
 
     def get_orthogonality_metrics(self) -> Dict[str, torch.Tensor]:
         """
-        Get runtime orthogonality metrics for monitoring.
+        Получает метрики ортогональности во время выполнения для мониторинга.
 
         Returns:
-            Dict with aggregated orthogonality stats.
+            Словарь с агрегированной статистикой ортогональности.
         """
         metrics: Dict[str, torch.Tensor] = {}
 
@@ -307,21 +307,21 @@ class OrthogonalBundleGNN(BaseRecommender):
         edge_index: Optional[torch.Tensor] = None
     ) -> List[torch.Tensor]:
         """
-        Get embeddings for each layer (for over-smoothing analysis).
-        
-        Returns embeddings at each layer to analyze:
-        - Over-smoothing: similarity between embeddings across layers
-        - Norm preservation: ||x^(l)|| should remain stable
+        Получает эмбеддинги для каждого слоя (для анализа over-smoothing).
+
+        Возвращает эмбеддинги на каждом слое для анализа:
+        - Over-smoothing: схожесть между эмбеддингами по слоям
+        - Сохранение нормы: ||x^(l)|| должна оставаться стабильной
         """
-        # Initial embeddings
+        # Начальные эмбеддинги
         x = torch.cat([
             self.user_embedding.weight,
             self.item_embedding.weight
         ], dim=0)
-        
+
         all_embeddings = [x.clone()]
-        
-        # Pass through each layer
+
+        # Проходим через каждый слой
         for layer_idx in range(self.n_layers):
             if self.use_parallel_transport:
                 W_connection = self.connection_layers[layer_idx]()
@@ -335,7 +335,7 @@ class OrthogonalBundleGNN(BaseRecommender):
                         x_conv = torch.mm(adj_matrix, x)
                     x_transported = x_conv @ W_connection
                 else:
-                    raise ValueError("Must provide either adj_matrix or edge_index")
+                    raise ValueError("Должна быть передана либо adj_matrix, либо edge_index")
             else:
                 if self.use_edge_index and edge_index is not None:
                     x_transported = self._graph_conv_edge_index(x, edge_index)
@@ -345,23 +345,23 @@ class OrthogonalBundleGNN(BaseRecommender):
                     else:
                         x_transported = torch.mm(adj_matrix, x)
                 else:
-                    raise ValueError("Must provide either adj_matrix or edge_index")
-            
-            # Local transformation
+                    raise ValueError("Должна быть передана либо adj_matrix, либо edge_index")
+
+            # Локальное преобразование
             x = self.local_transform_layers[layer_idx](x_transported)
             all_embeddings.append(x.clone())
-        
+
         return all_embeddings
-    
+
     def reset_parameters(self):
         """
-        Reset parameters to initial values.
+        Сбрасывает параметры к начальным значениям.
         """
-        # Reset embeddings
+        # Сбрасываем эмбеддинги
         nn.init.normal_(self.user_embedding.weight, mean=0.0, std=0.01)
         nn.init.normal_(self.item_embedding.weight, mean=0.0, std=0.01)
-        
-        # Reset layers
+
+        # Сбрасываем слои
         for layer in self.local_transform_layers:
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
