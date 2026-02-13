@@ -1,0 +1,289 @@
+\section{Proposed Method: Orthogonal Bundle GNN}
+
+In this chapter, we present the Orthogonal Bundle Graph Neural Network (OB-GNN) --- a collaborative filtering architecture that applies the mathematical framework of discrete vector bundles to bipartite user--item graphs. The central idea is to constrain all message-passing transformations to the orthogonal group $O(d)$, which provably preserves the norm of feature vectors during propagation and addresses the over-smoothing problem inherent in deep GNNs.
+
+
+\subsection{Data Representation}
+
+Let $\mathcal{U} = \{u_1, \ldots, u_M\}$ be the set of $M$ users, $\mathcal{I} = \{i_1, \ldots, i_N\}$ the set of $N$ items, and $\mathbf{R} \in \{0,1\}^{M \times N}$ the binary interaction matrix where $R_{ui} = 1$ if user $u$ has interacted with item $i$. We construct an undirected bipartite graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ with $\mathcal{V} = \mathcal{U} \cup \mathcal{I}$ and adjacency matrix:
+\begin{equation}
+    \mathbf{A} = \begin{pmatrix} \mathbf{0} & \mathbf{R} \\ \mathbf{R}^\top & \mathbf{0} \end{pmatrix} \in \mathbb{R}^{(M+N) \times (M+N)}.
+\end{equation}
+
+The adjacency matrix is symmetrically normalized following the standard GCN convention:
+\begin{equation}
+    \tilde{\mathbf{A}} = \mathbf{D}^{-1/2} \mathbf{A} \, \mathbf{D}^{-1/2},
+\end{equation}
+where $\mathbf{D}$ is the diagonal degree matrix with $D_{vv} = \sum_j A_{vj}$. This normalization bounds the spectral radius of $\tilde{\mathbf{A}}$ by 1, stabilizing propagation dynamics. Prior to graph construction, the data undergoes iterative $k$-core filtering, binarization of ratings, and re-indexing of identifiers to contiguous ranges.
+
+
+\subsection{Embedding}
+
+Each node $v \in \mathcal{V}$ is assigned a learnable embedding $\mathbf{e}_v^{(0)} \in \mathbb{R}^d$, stored in two tables $\mathbf{E}_{\mathcal{U}}^{(0)} \in \mathbb{R}^{M \times d}$ and $\mathbf{E}_{\mathcal{I}}^{(0)} \in \mathbb{R}^{N \times d}$, initialized from $\mathcal{N}(0, 0.01^2)$. The concatenation forms the initial node feature matrix:
+\begin{equation}
+    \mathbf{X}^{(0)} = \begin{pmatrix} \mathbf{E}_{\mathcal{U}}^{(0)} \\ \mathbf{E}_{\mathcal{I}}^{(0)} \end{pmatrix} \in \mathbb{R}^{(M+N) \times d}.
+\end{equation}
+
+In the bundle framework, each $\mathbf{e}_v^{(0)}$ is an element of the \textit{fiber} $F_v \cong \mathbb{R}^d$ --- a local vector space attached to vertex $v$. The dimension $d$ must satisfy $d = b \cdot g$, where $b$ is the block size and $g$ is the number of groups.
+
+
+\subsection{Vector Bundles on Graphs}
+
+In differential geometry, a \textit{vector bundle} associates a vector space (\textit{fiber}) to each point of a base manifold, together with a \textit{connection} that defines how to coherently transport vectors between neighboring fibers. A connection is called \textit{metric-compatible} if the transport maps preserve the inner product, which constrains them to the orthogonal group. We adapt this framework to the discrete setting of graphs following~\cite{singer2012vector, kenlay2021stability}.
+
+A \textit{discrete vector bundle} over a graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ consists of:
+\begin{enumerate}
+    \item A \textit{fiber} $F_v \cong \mathbb{R}^d$ attached to each vertex $v \in \mathcal{V}$.
+    \item A collection of \textit{transport operators} $\mathbf{O}_{ij}: F_j \to F_i$ for each edge $(i, j) \in \mathcal{E}$, prescribing how to move vectors between fibers.
+\end{enumerate}
+The matrix $\mathbf{X} \in \mathbb{R}^{|\mathcal{V}| \times d}$ of node embeddings is a \textit{section} of this bundle. The connection is \textit{orthogonal} if all transport operators belong to $O(d)$, which guarantees norm preservation:
+\begin{equation}
+    \mathbf{O}_{ij} \in O(d) \;\; \Longrightarrow \;\; \|\mathbf{O}_{ij} \, \mathbf{x}_j\|_2 = \|\mathbf{x}_j\|_2, \quad \forall \, \mathbf{x}_j \in F_j.
+\end{equation}
+
+In standard GNNs, the message-passing update implicitly assumes all node features share the same coordinate system:
+\begin{equation}
+    \mathbf{x}_i^{(l)} = \phi\!\left(\mathbf{x}_i^{(l-1)},\; \bigoplus_{j \in \mathcal{N}(i)} \psi\!\left(\mathbf{x}_i^{(l-1)}, \mathbf{x}_j^{(l-1)}\right)\right).
+\end{equation}
+Bundle message passing instead first transports each neighbor's feature into the target node's fiber before aggregation:
+\begin{equation}
+    \mathbf{x}_i^{(l)} = \phi\!\left(\mathbf{x}_i^{(l-1)},\; \bigoplus_{j \in \mathcal{N}(i)} \mathbf{O}_{ij}^{(l)} \, \mathbf{x}_j^{(l-1)}\right).
+\end{equation}
+In matrix form: $\mathbf{X}^{(l)} = \tilde{\mathbf{A}} \, \mathbf{X}^{(l-1)} \, \mathbf{O}^{(l)}$, where $\tilde{\mathbf{A}}$ performs neighborhood aggregation and $\mathbf{O}^{(l)} \in O(d)$ applies parallel transport.
+
+This orthogonal constraint directly addresses over-smoothing. In a standard GCN layer $\mathbf{X}^{(l)} = \tilde{\mathbf{A}} \mathbf{X}^{(l-1)} \mathbf{W}^{(l)}$, the singular values of $\mathbf{W}^{(l)}$ may be less than 1, causing progressive attenuation of feature directions across layers. In OB-GNN, all singular values of $\mathbf{O}^{(l)}$ are exactly 1 by construction --- the transformation is a pure rotation that neither expands nor contracts any direction:
+\begin{equation}
+    \left\|\mathbf{x} \cdot \mathbf{O}^{(l)}\right\|_2 = \|\mathbf{x}\|_2, \quad \forall \, \mathbf{x} \in \mathbb{R}^d.
+\end{equation}
+
+%% ─── DIAGRAM: Bundle on Graph ───
+\begin{figure}[h]
+\centering
+\begin{verbatim}
+        Discrete Vector Bundle on a Bipartite Graph
+
+     User fibers                        Item fibers
+     F_u ≅ R^d                          F_i ≅ R^d
+
+    ┌─────────┐       O_{iu}           ┌─────────┐
+    │  x_u1   │─────────────────────►  │  x_i1   │
+    │  ∈ F_u1 │  ◄─────────────────── │  ∈ F_i1 │
+    └─────────┘       O_{u1,i1}        └─────────┘
+         │                                  │
+         │ O_{u1,i2}            O_{u2,i1}   │
+         │                                  │
+    ┌────▼────┐       O_{iu}           ┌────▼────┐
+    │  x_u2   │─────────────────────►  │  x_i2   │
+    │  ∈ F_u2 │  ◄─────────────────── │  ∈ F_i2 │
+    └─────────┘       O_{u2,i2}        └─────────┘
+
+    Standard GNN:  x_i ← Σ W · x_j      (W arbitrary)
+    Bundle GNN:    x_i ← Σ O_{ij} · x_j  (O_{ij} ∈ O(d))
+\end{verbatim}
+\caption{Discrete vector bundle over the bipartite graph. Each vertex has a fiber $F_v \cong \mathbb{R}^d$; each edge carries an orthogonal transport operator $\mathbf{O}_{ij} \in O(d)$ that preserves norms during message passing.}
+\label{fig:bundle}
+\end{figure}
+
+
+\subsection{Orthogonal Bundle Propagation}
+
+Each propagation layer $l \in \{1, \ldots, L\}$ implements the bundle message-passing scheme through three stages: parallel transport, local fiber transformation, and residual stabilization.
+
+\subsubsection{Stage 1: Parallel Transport via Orthogonal Connection}
+
+The connection matrix $\mathbf{W}_{\text{conn}}^{(l)} \in O(d)$ is constructed from $g = d/b$ learnable blocks via the Lie algebra $\mathfrak{so}(b)$ of skew-symmetric matrices. For each block $k$, a learnable parameter matrix $\mathbf{S}_k^{(l)} \in \mathbb{R}^{b \times b}$ is projected to a skew-symmetric matrix, and the matrix exponential produces an orthogonal block:
+\begin{equation}
+    \mathbf{A}_k^{(l)} = \mathbf{S}_k^{(l)} - \left(\mathbf{S}_k^{(l)}\right)^\top, \qquad
+    \mathbf{Q}_k^{(l)} = \exp\!\left(\mathbf{A}_k^{(l)}\right) \in O(b).
+\end{equation}
+Since $\mathbf{A}_k^{(l)}$ is skew-symmetric, $\exp(\mathbf{A}_k^{(l)})$ is guaranteed to be orthogonal --- this follows from the classical result that the exponential map sends $\mathfrak{so}(n)$ to $SO(n)$.
+
+The blocks are assembled into a block-diagonal matrix, and a fixed random permutation $\mathbf{P}_{\pi^{(l)}}$ is applied to columns to enable cross-block information flow:
+\begin{equation}
+    \mathbf{W}_{\text{conn}}^{(l)} = \text{diag}\!\left(\mathbf{Q}_1^{(l)}, \ldots, \mathbf{Q}_g^{(l)}\right) \cdot \mathbf{P}_{\pi^{(l)}} \in O(d).
+\end{equation}
+Since both the block-diagonal matrix and the permutation matrix are orthogonal, their product $\mathbf{W}_{\text{conn}}^{(l)}$ is also orthogonal.
+
+The parallel transport step combines neighborhood aggregation with the connection:
+\begin{equation}
+    \mathbf{X}_{\text{transported}}^{(l)} = \tilde{\mathbf{A}} \, \mathbf{X}^{(l-1)} \, \mathbf{W}_{\text{conn}}^{(l)}.
+\end{equation}
+
+%% ─── DIAGRAM: Orthogonal Matrix Construction ───
+\begin{figure}[h]
+\centering
+\begin{verbatim}
+            Orthogonal Connection Matrix Construction
+
+  S_1 ∈ R^{b×b}  ──►  A_1 = S_1 - S_1^T  ──► exp(A_1) = Q_1
+  S_2 ∈ R^{b×b}  ──►  A_2 = S_2 - S_2^T  ──► exp(A_2) = Q_2
+      ...                    ...                    ...
+  S_g ∈ R^{b×b}  ──►  A_g = S_g - S_g^T  ──► exp(A_g) = Q_g
+
+   ┌────┬────┬─────┬────┐
+   │ Q_1│  0 │ ... │  0 │
+   ├────┼────┼─────┼────┤
+   │  0 │ Q_2│ ... │  0 │  = W_block  ──► Shuffle ──► W_conn
+   ├────┼────┼─────┼────┤
+   │  0 │  0 │ ... │ Q_g│     W_conn^T · W_conn = I  ✓
+   └────┴────┴─────┴────┘
+\end{verbatim}
+\caption{Orthogonal connection matrix construction: learnable parameters $\to$ skew-symmetric matrices $\to$ matrix exponential $\to$ block-diagonal assembly $\to$ column permutation (shuffle).}
+\label{fig:connection}
+\end{figure}
+
+
+\subsubsection{Stage 2: Local Fiber Transformation (Group \& Shuffle)}
+
+After parallel transport, a local transformation is applied within each node's fiber to increase model expressiveness. A separate set of learnable parameters $\{\hat{\mathbf{S}}_k^{(l)} \in \mathbb{R}^{b \times b}\}_{k=1}^{g}$ constructs a local orthogonal matrix $\mathbf{W}_{\text{local}}^{(l)} \in O(d)$ through the identical procedure:
+\begin{equation}
+    \hat{\mathbf{A}}_k^{(l)} = \hat{\mathbf{S}}_k^{(l)} - \left(\hat{\mathbf{S}}_k^{(l)}\right)^\top, \quad
+    \hat{\mathbf{Q}}_k^{(l)} = \exp\!\left(\hat{\mathbf{A}}_k^{(l)}\right),
+\end{equation}
+\begin{equation}
+    \mathbf{W}_{\text{local}}^{(l)} = \text{diag}\!\left(\hat{\mathbf{Q}}_1^{(l)}, \ldots, \hat{\mathbf{Q}}_g^{(l)}\right) \cdot \hat{\mathbf{P}}_{\hat\pi^{(l)}}.
+\end{equation}
+
+The local transformation is then:
+\begin{equation}
+    \mathbf{X}_{\text{transformed}}^{(l)} = \mathbf{X}_{\text{transported}}^{(l)} \, \mathbf{W}_{\text{local}}^{(l)}.
+\end{equation}
+The Group step (block-orthogonal rotation) and the Shuffle step (feature permutation) together ensure that information flows across all $d$ feature dimensions over successive layers, despite each block operating within a $b$-dimensional subspace.
+
+
+\subsubsection{Stage 3: Residual Connection and Layer Aggregation}
+
+A residual connection mixes the transformed output with the initial embeddings to preserve node identity and counteract the averaging effect of $\tilde{\mathbf{A}}$:
+\begin{equation}
+    \mathbf{X}^{(l)} = (1 - \alpha) \cdot \mathbf{X}_{\text{transformed}}^{(l)} + \alpha \cdot \mathbf{X}^{(0)},
+\end{equation}
+where $\alpha \in [0, 1]$ controls the residual strength. Combined with the orthogonality of the transformations, this guarantees a lower bound on representational diversity:
+\begin{equation}
+    \|\mathbf{X}^{(l)}\|_F \geq (1 - \alpha) \cdot \|\tilde{\mathbf{A}} \mathbf{X}^{(l-1)}\|_F + \alpha \cdot \|\mathbf{X}^{(0)}\|_F > 0.
+\end{equation}
+
+After $L$ layers, all intermediate representations are aggregated via learnable softmax-normalized weights:
+\begin{equation}
+    \mathbf{X}_{\text{final}} = \sum_{l=0}^{L} w_l \cdot \mathbf{X}^{(l)}, \qquad
+    w_l = \frac{\exp(\beta_l)}{\sum_{l'=0}^{L} \exp(\beta_{l'})},
+\end{equation}
+where $\{\beta_l\}_{l=0}^{L}$ are learnable scalars initialized to 1. The final user and item embeddings are obtained by splitting:
+\begin{equation}
+    \mathbf{E}_{\mathcal{U}} = \mathbf{X}_{\text{final}}[1:M, :], \qquad \mathbf{E}_{\mathcal{I}} = \mathbf{X}_{\text{final}}[M+1:M+N, :].
+\end{equation}
+
+%% ─── DIAGRAM: Overall Architecture ───
+\begin{figure}[h]
+\centering
+\begin{verbatim}
+                    OB-GNN Architecture
+
+  X^(0) ──► [ A·X·W_conn ] ──► [ X·W_local ] ──► (1-α)·T+α·X^(0) = X^(1)
+    │           Transport        Group&Shuffle       Residual
+    │
+  X^(1) ──► [ A·X·W_conn ] ──► [ X·W_local ] ──► (1-α)·T+α·X^(0) = X^(2)
+    │
+   ...                                                       ...
+    │
+  X^(L-1) ─► [ A·X·W_conn ] ──► [ X·W_local ] ──► (1-α)·T+α·X^(0) = X^(L)
+    │
+    ▼
+  Layer Aggregation:  X_final = Σ w_l · X^(l),  l = 0..L
+                                 │
+                        ┌────────┴────────┐
+                        │  E_U  │   E_I   │
+                        │(users)│ (items)  │
+                        └─────────────────┘
+\end{verbatim}
+\caption{OB-GNN architecture: $L$ propagation layers (parallel transport $\to$ Group \& Shuffle $\to$ residual), followed by weighted layer aggregation.}
+\label{fig:architecture}
+\end{figure}
+
+
+\subsection{Recommendation}
+
+The predicted preference score for user $u$ on item $i$ is the inner product of their final embeddings:
+\begin{equation}
+    \hat{y}_{ui} = \mathbf{e}_u^\top \mathbf{e}_i = \sum_{k=1}^{d} e_{u,k} \cdot e_{i,k}.
+\end{equation}
+A top-$K$ recommendation list is generated by ranking all candidate items in descending order of $\hat{y}_{ui}$:
+\begin{equation}
+    \text{TopK}(u) = \underset{i \in \mathcal{I} \setminus \mathcal{I}_u^{\text{train}}}{\arg\text{top-}K} \; \hat{y}_{ui},
+\end{equation}
+where $\mathcal{I}_u^{\text{train}}$ is excluded to avoid recommending already consumed items.
+
+
+\subsection{Training}
+
+\subsubsection{Loss Function}
+
+OB-GNN is trained on implicit feedback using the Bayesian Personalized Ranking (BPR) loss~\cite{rendle2009bpr}. For each mini-batch $\mathcal{B}$ of (user, positive item, negative item) triplets:
+\begin{equation}
+    \mathcal{L}_{\text{BPR}} = - \frac{1}{|\mathcal{B}|} \sum_{(u, i^+, i^-) \in \mathcal{B}} \ln \sigma\!\left(\hat{y}_{ui^+} - \hat{y}_{ui^-}\right),
+\end{equation}
+where $\sigma(\cdot)$ is the sigmoid function. Negative items $i^-$ are sampled uniformly from $\mathcal{I} \setminus \mathcal{I}_u^{\text{train}}$ via rejection sampling. The overall training objective includes $L_2$ regularization:
+\begin{equation}
+    \mathcal{L} = \mathcal{L}_{\text{BPR}} + \lambda \sum_{\theta \in \Theta} \|\theta\|_2^2,
+\end{equation}
+where $\lambda$ is the regularization coefficient and $\Theta$ includes embedding tables, skew-symmetric parameters, and layer aggregation weights.
+
+
+\subsubsection{Optimization}
+
+The model is optimized using the Adam optimizer with the following schedule:
+\begin{enumerate}
+    \item \textbf{Linear warmup}: During the first $T_w$ epochs, the learning rate increases linearly:
+    $\eta_t = \eta_0 \cdot t / T_w$.
+
+    \item \textbf{Cosine annealing}: After warmup, the learning rate follows cosine decay:
+    \begin{equation}
+        \eta_t = \eta_{\min} + \frac{\eta_0 - \eta_{\min}}{2} \left(1 + \cos\!\left(\frac{\pi \cdot (t - T_w)}{T - T_w}\right)\right),
+    \end{equation}
+    where $\eta_{\min} = 0.01 \cdot \eta_0$.
+\end{enumerate}
+
+Gradient clipping with maximum norm $\gamma$ is applied after each backward pass:
+\begin{equation}
+    \nabla\mathcal{L} \leftarrow \frac{\gamma}{\max(\gamma, \|\nabla\mathcal{L}\|_2)} \cdot \nabla\mathcal{L}.
+\end{equation}
+
+Early stopping on Recall@10 with patience $P$ is used for model selection.
+
+
+\subsubsection{Orthogonality Monitoring}
+
+Although the exponential map guarantees exact orthogonality in theory, floating-point arithmetic may introduce small deviations. We monitor two metrics throughout training:
+\begin{equation}
+    \epsilon_{\text{Fro}}^{(l)} = \left\|\mathbf{W}^{(l)\top} \mathbf{W}^{(l)} - \mathbf{I}\right\|_F, \qquad
+    \epsilon_{\max}^{(l)} = \max_{i,j} \left|\left(\mathbf{W}^{(l)\top} \mathbf{W}^{(l)} - \mathbf{I}\right)_{ij}\right|,
+\end{equation}
+where $\mathbf{W}^{(l)}$ denotes any orthogonal matrix at layer $l$. In practice, both metrics remain below $10^{-6}$, confirming that orthogonality is maintained with high numerical accuracy.
+
+
+\subsubsection{Hyperparameters}
+
+Table~\ref{tab:hyperparams} summarizes the default hyperparameters of OB-GNN.
+
+\begin{table}[h]
+\centering
+\caption{Default hyperparameters of OB-GNN.}
+\label{tab:hyperparams}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Symbol} & \textbf{Default} \\
+\midrule
+Embedding dimension       & $d$            & 64 \\
+Number of layers          & $L$            & 3 \\
+Block size                & $b$            & 8 \\
+Number of groups          & $g = d/b$      & 8 \\
+Residual coefficient      & $\alpha$       & 0.1 \\
+Learning rate             & $\eta_0$       & 0.001 \\
+Weight decay              & $\lambda$      & $10^{-4}$ \\
+Batch size                & $|\mathcal{B}|$& 2048 \\
+Warmup epochs             & $T_w$          & 5 \\
+Gradient clip norm        & $\gamma$       & 1.0 \\
+Early stopping patience   & $P$            & 20 \\
+Initialization scale      & $\sigma$       & 0.01 \\
+\bottomrule
+\end{tabular}
+\end{table}
